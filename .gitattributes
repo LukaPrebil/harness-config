@@ -1,2 +1,3 @@
 settings.json text eol=lf filter=strip-ephemeral-state
-pi/settings.json text eol=lf filter=strip-ephemeral-state
+pi/settings.work.json text eol=lf filter=strip-ephemeral-state
+pi/settings.personal.json text eol=lf filter=strip-ephemeral-state

@@ -54,6 +54,10 @@ _Avoid_: "sandbox", "security boundary" - an in-process gate is friction, not is
 A permission config a host mechanism consumes, generated from the Deny list rather than hand-edited; staleness is Drift.
 _Avoid_: "synced permissions", hand-edited copies of Deny-list rules.
 
+**Profile**:
+One of the two pi account scopes, work or personal; a Profile's config directory is selected by the account shim, and each Profile consumes its own startup settings file.
+_Avoid_: "account" for the scope itself - the account shim answers work or personal, the Profile is the resulting configuration scope.
+
 **Drift**:
 A host's links diverging from the checkout; the Host bootstrap detects it with `--check` and repairs it with `--apply`.
 _Avoid_: "config drift", "stale links", "out-of-sync".

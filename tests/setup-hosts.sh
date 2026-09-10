@@ -70,7 +70,8 @@ new_case() {
   : > "$TEST_REPO/scripts/statusline.sh"
   : > "$TEST_REPO/.github/pull_request_template.md"
   mkdir -p "$TEST_REPO/pi/extensions"
-  : > "$TEST_REPO/pi/settings.json"
+  : > "$TEST_REPO/pi/settings.work.json"
+  : > "$TEST_REPO/pi/settings.personal.json"
   : > "$TEST_REPO/pi/models.json"
   : > "$TEST_REPO/pi/mcp.json"
   : > "$TEST_REPO/pi/extensions/statusline.ts"
@@ -99,6 +100,10 @@ run_setup_with_pi_dir() {
 }
 
 run_setup_bare() {
+  # Clear ambient profile routing (a pi session exports PI_CODING_AGENT_DIR)
+  # so the drift-check call shape stays hermetic to the disposable HOME.
+  PI_CONFIG_DIRS="" \
+  PI_CODING_AGENT_DIR="" \
   HOME="$TEST_HOME" \
   AGENT_CONFIG_REPO="$TEST_REPO" \
     bash "$SETUP" "$@"
@@ -160,8 +165,8 @@ hooks|hooks
 rules|rules
 EOF
 assert_true "Codex AGENTS.md is shared" assert_link "$TEST_HOME/.codex/AGENTS.md" "$TEST_REPO/AGENTS.md"
-assert_true "Pi base dir receives instructions and resources" assert_link "$TEST_HOME/.pi/agent/AGENTS.md" "$TEST_REPO/AGENTS.md" && assert_link "$TEST_HOME/.pi/agent/extensions" "$TEST_REPO/pi/extensions" && assert_link "$TEST_HOME/.pi/agent/settings.json" "$TEST_REPO/pi/settings.json" && assert_link "$TEST_HOME/.pi/agent/models.json" "$TEST_REPO/pi/models.json" && assert_link "$TEST_HOME/.pi/agent/agents" "$TEST_REPO/agents"
-assert_true "Pi personal dir receives instructions and resources" assert_link "$TEST_HOME/.pi-personal/agent/AGENTS.md" "$TEST_REPO/AGENTS.md" && assert_link "$TEST_HOME/.pi-personal/agent/extensions" "$TEST_REPO/pi/extensions" && assert_link "$TEST_HOME/.pi-personal/agent/settings.json" "$TEST_REPO/pi/settings.json" && assert_link "$TEST_HOME/.pi-personal/agent/models.json" "$TEST_REPO/pi/models.json" && assert_link "$TEST_HOME/.pi-personal/agent/agents" "$TEST_REPO/agents"
+assert_true "Pi base dir receives instructions and resources" assert_link "$TEST_HOME/.pi/agent/AGENTS.md" "$TEST_REPO/AGENTS.md" && assert_link "$TEST_HOME/.pi/agent/extensions" "$TEST_REPO/pi/extensions" && assert_link "$TEST_HOME/.pi/agent/settings.json" "$TEST_REPO/pi/settings.work.json" && assert_link "$TEST_HOME/.pi/agent/models.json" "$TEST_REPO/pi/models.json" && assert_link "$TEST_HOME/.pi/agent/agents" "$TEST_REPO/agents"
+assert_true "Pi personal dir receives instructions and resources" assert_link "$TEST_HOME/.pi-personal/agent/AGENTS.md" "$TEST_REPO/AGENTS.md" && assert_link "$TEST_HOME/.pi-personal/agent/extensions" "$TEST_REPO/pi/extensions" && assert_link "$TEST_HOME/.pi-personal/agent/settings.json" "$TEST_REPO/pi/settings.personal.json" && assert_link "$TEST_HOME/.pi-personal/agent/models.json" "$TEST_REPO/pi/models.json" && assert_link "$TEST_HOME/.pi-personal/agent/agents" "$TEST_REPO/agents"
 assert_true "shared skills are repo-owned" assert_link "$TEST_HOME/.agents/skills" "$TEST_REPO/skills"
 assert_true "Codex fallback is created" grep -Fq 'project_doc_fallback_filenames = ["CLAUDE.md"]' "$TEST_HOME/.codex/config.toml"
 assert_true "Codex status line is created" grep -Fq 'status_line = ["project-name", "git-branch", "model-with-reasoning", "context-used", "five-hour-limit", "weekly-limit", "thread-credits", "estimated-thread-cost"]' "$TEST_HOME/.codex/config.toml"
@@ -173,7 +178,7 @@ assert_success "clean check exits zero" run_setup --check
 new_case pi_only
 assert_success "Pi-only apply succeeds" run_setup --apply --host pi
 assert_true "Pi-only apply links instructions" assert_link "$TEST_HOME/.pi/agent/AGENTS.md" "$TEST_REPO/AGENTS.md"
-assert_true "Pi-only apply links the personal dir too" assert_link "$TEST_HOME/.pi-personal/agent/AGENTS.md" "$TEST_REPO/AGENTS.md" && assert_link "$TEST_HOME/.pi-personal/agent/extensions" "$TEST_REPO/pi/extensions" && assert_link "$TEST_HOME/.pi-personal/agent/settings.json" "$TEST_REPO/pi/settings.json" && assert_link "$TEST_HOME/.pi-personal/agent/models.json" "$TEST_REPO/pi/models.json" && assert_link "$TEST_HOME/.pi-personal/agent/agents" "$TEST_REPO/agents"
+assert_true "Pi-only apply links the personal dir too" assert_link "$TEST_HOME/.pi-personal/agent/AGENTS.md" "$TEST_REPO/AGENTS.md" && assert_link "$TEST_HOME/.pi-personal/agent/extensions" "$TEST_REPO/pi/extensions" && assert_link "$TEST_HOME/.pi-personal/agent/settings.json" "$TEST_REPO/pi/settings.personal.json" && assert_link "$TEST_HOME/.pi-personal/agent/models.json" "$TEST_REPO/pi/models.json" && assert_link "$TEST_HOME/.pi-personal/agent/agents" "$TEST_REPO/agents"
 assert_true "Pi base directory receives MCP config" assert_link "$TEST_HOME/.pi/agent/mcp.json" "$TEST_REPO/pi/mcp.json"
 assert_true "Pi personal directory receives MCP config" assert_link "$TEST_HOME/.pi-personal/agent/mcp.json" "$TEST_REPO/pi/mcp.json"
 assert_true "Pi-only apply links shared skills" assert_link "$TEST_HOME/.agents/skills" "$TEST_REPO/skills"
@@ -190,11 +195,20 @@ new_case pi_custom_dir
 CUSTOM_PI_DIR="$CASE_DIR/custom-pi"
 assert_success "Pi custom directory apply succeeds" run_setup_with_pi_dir "$CUSTOM_PI_DIR" --apply --host pi
 assert_true "Pi custom directory receives instructions" assert_link "$CUSTOM_PI_DIR/AGENTS.md" "$TEST_REPO/AGENTS.md"
-assert_true "Pi custom directory receives extension and settings links" assert_link "$CUSTOM_PI_DIR/extensions" "$TEST_REPO/pi/extensions" && assert_link "$CUSTOM_PI_DIR/settings.json" "$TEST_REPO/pi/settings.json" && assert_link "$CUSTOM_PI_DIR/models.json" "$TEST_REPO/pi/models.json"
+assert_true "Pi custom directory receives extension and settings links" assert_link "$CUSTOM_PI_DIR/extensions" "$TEST_REPO/pi/extensions" && assert_link "$CUSTOM_PI_DIR/settings.json" "$TEST_REPO/pi/settings.work.json" && assert_link "$CUSTOM_PI_DIR/models.json" "$TEST_REPO/pi/models.json"
 assert_true "Pi custom directory receives MCP config" assert_link "$CUSTOM_PI_DIR/mcp.json" "$TEST_REPO/pi/mcp.json"
 assert_true "Pi default directory stays absent" test ! -e "$TEST_HOME/.pi"
 assert_true "Pi custom directory still gets shared skills" assert_link "$TEST_HOME/.agents/skills" "$TEST_REPO/skills"
 assert_success "Pi custom directory check exits zero" run_setup_with_pi_dir "$CUSTOM_PI_DIR" --check --host pi
+
+# The profile convention also routes custom dirs that name the personal
+# profile in their path.
+new_case pi_custom_personal_dir
+CUSTOM_PERSONAL_DIR="$CASE_DIR/custom-pi-personal"
+assert_success "Pi custom personal directory apply succeeds" run_setup_with_pi_dir "$CUSTOM_PERSONAL_DIR" --apply --host pi
+assert_true "Pi custom personal directory receives personal settings" assert_link "$CUSTOM_PERSONAL_DIR/settings.json" "$TEST_REPO/pi/settings.personal.json"
+assert_true "Pi custom personal directory receives shared models" assert_link "$CUSTOM_PERSONAL_DIR/models.json" "$TEST_REPO/pi/models.json"
+assert_success "Pi custom personal directory check exits zero" run_setup_with_pi_dir "$CUSTOM_PERSONAL_DIR" --check --host pi
 
 # Pi-only adoption recovers both host and shared-resource conflicts across
 # every configured agent dir.
@@ -357,7 +371,7 @@ cat > "$TEST_HOME/.agents/hosts.env" <<'SCOPE'
 SCOPE
 assert_success "scope file applies with no arguments" run_setup_bare --apply
 assert_true "scope file links the base claude dir" assert_link "$TEST_HOME/.claude/CLAUDE.md" "$TEST_REPO/CLAUDE.md"
-assert_true "scope file links the base pi dir" assert_link "$TEST_HOME/.pi/agent/settings.json" "$TEST_REPO/pi/settings.json"
+assert_true "scope file links the base pi dir" assert_link "$TEST_HOME/.pi/agent/settings.json" "$TEST_REPO/pi/settings.work.json"
 assert_true "scope file skips the personal claude dir" test ! -e "$TEST_HOME/.claude-personal"
 assert_true "scope file skips the personal pi dir" test ! -e "$TEST_HOME/.pi-personal"
 assert_true "scope file skips codex" test ! -e "$TEST_HOME/.codex"
@@ -369,7 +383,7 @@ assert_success "argument-free check is clean after apply" run_setup_bare --check
 new_case scope_file_absent_keeps_defaults
 assert_success "no scope file still applies" run_setup_bare --apply
 assert_true "no scope file links the personal claude dir" assert_link "$TEST_HOME/.claude-personal/CLAUDE.md" "$TEST_REPO/CLAUDE.md"
-assert_true "no scope file links the personal pi dir" assert_link "$TEST_HOME/.pi-personal/agent/settings.json" "$TEST_REPO/pi/settings.json"
+assert_true "no scope file links the personal pi dir" assert_link "$TEST_HOME/.pi-personal/agent/settings.json" "$TEST_REPO/pi/settings.personal.json"
 assert_true "no scope file configures codex" test -e "$TEST_HOME/.codex/AGENTS.md"
 
 # The := form means a real environment variable is never clobbered.
@@ -380,7 +394,7 @@ cat > "$TEST_HOME/.agents/hosts.env" <<'SCOPE'
 : "${HARNESS_SKIP_HOSTS:=codex pi}"
 SCOPE
 assert_success "environment overrides the scope file" env HOME="$TEST_HOME" AGENT_CONFIG_REPO="$TEST_REPO" PI_CONFIG_DIRS="$TEST_HOME/.pi-elsewhere/agent" HARNESS_SKIP_HOSTS="codex" bash "$SETUP" --apply
-assert_true "environment pi dir wins" assert_link "$TEST_HOME/.pi-elsewhere/agent/settings.json" "$TEST_REPO/pi/settings.json"
+assert_true "environment pi dir wins" assert_link "$TEST_HOME/.pi-elsewhere/agent/settings.json" "$TEST_REPO/pi/settings.work.json"
 assert_true "environment skip list wins" test ! -e "$TEST_HOME/.codex"
 assert_true "scope file pi dir is unused" test ! -e "$TEST_HOME/.pi/agent"
 

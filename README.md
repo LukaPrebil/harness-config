@@ -58,6 +58,8 @@ bash scripts/setup-hosts.sh --apply --host pi
 
 The Pi selector links instructions, `extensions/`, `settings.json`, `models.json`, and `mcp.json` into every configured pi agent dir. `PI_CONFIG_DIRS` defaults to `~/.pi/agent` plus `~/.pi-personal/agent`; `PI_CODING_AGENT_DIR` overrides it. It links shared skills under `~/.agents/skills`. These resources apply in interactive, print, JSON, and RPC modes. See [Pi's usage documentation](https://pi.dev/docs/latest/usage).
 
+Startup settings are per Profile: `pi/settings.work.json` and `pi/settings.personal.json` each hold the complete settings, and an agent dir whose path contains `personal` links the personal file while every other dir links the work file. Only `defaultProvider`, `defaultModel`, and `defaultThinkingLevel` differ; all other keys must stay identical across the pair, which `tests/settings-parity.test.ts` enforces by comparing the files minus the per-Profile keys.
+
 The bootstrap does not install or upgrade Pi. It does not manage providers, models, credentials, project trust, tools, or isolation. Pi has no built-in sandbox, so unattended work needs an external boundary. See [Pi's security guidance](https://pi.dev/docs/latest/security). Auto-compaction stays off by choice: a long session is handed off or stopped rather than silently summarized.
 
 The `permission-gate` extension derives pi's permission policy from the deny list in the root `settings.json` (the **Derived policy**): `Read` rules become `path_read` surfaces, `Edit`/`Write` rules `path_write`, `Bash` rules command patterns, and MCP rules are enforced rather than skipped. Mechanical enforcement is the pinned [`@gotgenes/pi-permission-system`](https://pi.dev/packages/@gotgenes/pi-permission-system) package; this extension regenerates its `config.json` at every session start and announces a stale policy loudly. Only deny rules are generated - the universal fallback is `allow` - so semantics stay deny-wins and headless sessions never prompt. Rules without a translation fail in tests, not at runtime. It remains friction, not a sandbox: deliberately obfuscated commands still win, so unattended pi work still needs the external boundary above.
@@ -68,7 +70,7 @@ Agent delegation is provided by the [`pi-subagents`](https://pi.dev/packages/pi-
 
 Run `/reload` after installing MCP configuration. Authenticate Notion with `/mcp-auth notion` and Slack with `/mcp-auth slack`; credentials stay outside this repository. Project `.mcp.json` overrides global servers with matching names, and `.pi/mcp.json` has highest precedence. Pi does not import Claude's MCP configuration.
 
-The pi resources themselves live in `pi/` (`settings.json`, `mcp.json`, `extensions/`) and are tracked like the claude root files. See [ADR 0009](docs/adr/0009-pi-adapter-vendored-settings-and-extensions.md) for the adapter boundary and [ADR 0010](docs/adr/0010-fork-lineage-with-personal-main-and-upstream-mirror.md) for the fork and branch model.
+The pi resources themselves live in `pi/` (`settings.work.json`, `settings.personal.json`, `mcp.json`, `extensions/`) and are tracked like the claude root files. See [ADR 0009](docs/adr/0009-pi-adapter-vendored-settings-and-extensions.md) for the adapter boundary and [ADR 0010](docs/adr/0010-fork-lineage-with-personal-main-and-upstream-mirror.md) for the fork and branch model.
 
 ## Releases
 

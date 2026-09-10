@@ -1,3 +1,21 @@
+# [0.5.0](https://github.com/LukaPrebil/harness-config/compare/v0.4.0...v0.5.0) (2026-09-10)
+
+
+### Bug Fixes
+
+* **pi:** derive Codex header labels from window duration ([f428e6e](https://github.com/LukaPrebil/harness-config/commit/f428e6e56f06e7c1dc3e784ab738cf6dda6a073e))
+* **release:** commit package-lock.json with release bumps ([f8e3e74](https://github.com/LukaPrebil/harness-config/commit/f8e3e74b307760159d44ee0ce2996cc23e552f51)), closes [#130](https://github.com/LukaPrebil/harness-config/issues/130)
+* **release:** push the bot commit with an admin credential ([#14](https://github.com/LukaPrebil/harness-config/issues/14)) ([c1872b9](https://github.com/LukaPrebil/harness-config/commit/c1872b9e25967a49e15864749f0b934929c0266d))
+* **release:** run semantic-release via npx instead of the docker image ([#3](https://github.com/LukaPrebil/harness-config/issues/3)) ([adcf85f](https://github.com/LukaPrebil/harness-config/commit/adcf85fe8948501488b21b69f6da9fed67217fd6))
+
+
+### Features
+
+* **claude:** promote session runtime settings to the tracked config ([#11](https://github.com/LukaPrebil/harness-config/issues/11)) ([2a8976e](https://github.com/LukaPrebil/harness-config/commit/2a8976ed7b1e0a2e77bc3d886aaf64e064982a60))
+* **config:** integrate multi-host layer and Pi adapter from harness-config ([#130](https://github.com/LukaPrebil/harness-config/issues/130)) ([ee64b5e](https://github.com/LukaPrebil/harness-config/commit/ee64b5e8240dc138944321426a79777fddacfa6f))
+* **pi:** manage Notion and Playwright MCP configuration ([5c78282](https://github.com/LukaPrebil/harness-config/commit/5c7828210e84f4c8b48ec57600a73177e4291631))
+* **pi:** package manifest and manual semantic releases ([#1](https://github.com/LukaPrebil/harness-config/issues/1)) ([2f26b9c](https://github.com/LukaPrebil/harness-config/commit/2f26b9c9ba9c81d26254d20dc651f0d51140826a))
+
 # [0.4.0](https://github.com/LukaPrebil/harness-config/compare/v0.3.0...v0.4.0) (2026-09-04)
 
 

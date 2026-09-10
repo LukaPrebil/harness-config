@@ -18,6 +18,7 @@
     "npm:pi-mcp-adapter@2.31.0",
     "npm:pi-intercom@0.12.1"
   ],
-  "defaultProvider": "ollama-cloud",
-  "defaultModel": "glm-5.3-flash"
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-6-astra",
+  "defaultThinkingLevel": "high"
 }

@@ -508,7 +508,13 @@ if host_enabled pi; then
     esac
     manage_link "$TAG/AGENTS.md" "$PI_DIR/AGENTS.md" "$REPO/AGENTS.md"
     manage_link "$TAG/extensions" "$PI_DIR/extensions" "$REPO/pi/extensions"
-    manage_link "$TAG/settings.json" "$PI_DIR/settings.json" "$REPO/pi/settings.json"
+    # A dir whose path names the personal profile gets the personal startup
+    # settings; every other dir, including custom overrides, gets work.
+    case "$PI_DIR" in
+      *personal*) PI_SETTINGS="$REPO/pi/settings.personal.json" ;;
+      *) PI_SETTINGS="$REPO/pi/settings.work.json" ;;
+    esac
+    manage_link "$TAG/settings.json" "$PI_DIR/settings.json" "$PI_SETTINGS"
     manage_link "$TAG/models.json" "$PI_DIR/models.json" "$REPO/pi/models.json"
     manage_link "$TAG/mcp.json" "$PI_DIR/mcp.json" "$REPO/pi/mcp.json"
     manage_link "$TAG/agents" "$PI_DIR/agents" "$REPO/agents"

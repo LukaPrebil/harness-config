@@ -1,3 +1,11 @@
+# [0.6.0](https://github.com/LukaPrebil/harness-config/compare/v0.5.0...v0.6.0) (2026-09-13)
+
+
+### Features
+
+* **pi:** install pi-web-access and set personal model to deepseek-v4.1-flash ([4b551a2](https://github.com/LukaPrebil/harness-config/commit/4b551a26245a1373854f3c3d8836a788bea15f7c))
+* **pi:** split startup settings per profile ([5ed501d](https://github.com/LukaPrebil/harness-config/commit/5ed501d63c5a4bfad4d3466902509745078afbad))
+
 # [0.5.0](https://github.com/LukaPrebil/harness-config/compare/v0.4.0...v0.5.0) (2026-09-10)
 
 

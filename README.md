@@ -4,7 +4,9 @@ Shared behavioral configuration for Claude Code, Codex, and Pi. It provides stru
 
 The root `AGENTS.md` is the concise shared instruction source. `skills/`, `rules/`, and the historical `.claude/state/` path are shared across agent hosts. Hooks, permissions, notifications, and teammate mechanics remain host-specific.
 
-Claude Code uses selective links under `~/.claude/` plus a second account dir (default `~/.claude-personal`) via `CLAUDE_CONFIG_DIRS`. Codex and Pi link their native instruction paths to `AGENTS.md`, while Codex and Pi discover the repo's skills through `~/.agents/skills`.
+Claude Code uses selective links under `~/.claude/` plus a second account dir (default `~/.claude-personal`) via `CLAUDE_CONFIG_DIRS`. Codex and Pi link their native instruction paths to `AGENTS.md`.
+
+Every host also gets `~/.agents/`, the shared root. It holds `skills`, `rules`, `scripts`, `templates`, `references`, `agents`, and the pull request template. A shared skill names `~/.agents/...` so one path resolves on every host.
 
 ## Quick start
 
@@ -23,9 +25,11 @@ bash scripts/setup-hosts.sh --apply
 bash scripts/setup-hosts.sh --apply --adopt
 
 # Strip ephemeral state Claude Code and Pi write to settings.json at runtime
-git config filter.strip-ephemeral-state.clean 'jq "del(.feedbackSurveyState, .lastChangelogVersion)" 2>/dev/null || cat'
+git config filter.strip-ephemeral-state.clean 'jq "del(.feedbackSurveyState, .lastChangelogVersion, .autoMode)" 2>/dev/null || cat'
 git config filter.strip-ephemeral-state.smudge cat
 ```
+
+The filter is per-clone, so a checkout that skips those two commands will commit whatever the host wrote at runtime, including the `autoMode` environment inventory. `scripts/config-integrity.sh` fails the build when that reaches a commit, and prints the two commands to fix it.
 
 `--check` is read-only and exits nonzero when drift exists. `--apply` never replaces a real path or wrong symlink. `--adopt` is the only replacement mode, and it moves every conflict to an adjacent `<path>.bak.<timestamp>` backup instead of deleting it. The existing `scripts/setup-symlinks.sh` command remains a Claude-only compatibility wrapper.
 
@@ -43,7 +47,7 @@ A machine that does not use every default dir records its own scope in `~/.agent
 
 Without this, an argument-free `--check` re-derives the two-dir defaults and reports permanent drift on dirs the machine never adopted. That matters because the `drift-check` extension calls the script with no arguments and no environment, so the scope has to be a recorded fact rather than a shell prefix someone remembers to type.
 
-This repo is a fork of [`domengabrovsek/claude`](https://github.com/domengabrovsek/claude) carrying the multi-harness direction. `main` is the live personal config; the `upstream-main` branch mirrors upstream, upstream-bound PR branches cut from it, and upstream work rebases into `main` periodically. See [ADR 0010](docs/adr/0010-fork-lineage-with-personal-main-and-upstream-mirror.md).
+This repo is a fork of [`domengabrovsek/agent-config`](https://github.com/domengabrovsek/agent-config) carrying the multi-harness direction. `main` is the live personal config; the `upstream-main` branch mirrors upstream, upstream-bound PR branches cut from it, and upstream work rebases into `main` periodically. See [ADR 0010](docs/adr/0010-fork-lineage-with-personal-main-and-upstream-mirror.md).
 
 For Codex, the bootstrap adds the shared-instruction fallback and a built-in TUI status line only when each setting is absent. It preserves an existing custom status line.
 
@@ -113,4 +117,5 @@ Releases never publish to npm. The bot release commit on `main` is the one non-h
 ## More
 
 - **Security boundaries** - deny list, Bash restrictions, and lock-file protection live in [`settings.json`](settings.json).
-- **CI** - markdown linting on push/PR (`.github/workflows/`).
+- **CI** - `.github/workflows/pull-request.yml` runs six jobs. They cover markdown linting, the rule budget, the prose gate, the pi extension tests, the shell test suites, and config integrity. A single `Gate` check aggregates them.
+- **Local gate** - `scripts/config-budget.sh`, `scripts/config-integrity.sh`, and `scripts/shellcheck-all.sh` each run standalone and are what CI invokes.

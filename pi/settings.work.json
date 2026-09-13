@@ -1,5 +1,7 @@
 {
   "theme": "dark",
+  "tuiMode": "fullscreen",
+  "fullscreenExitOutput": "resume-hint",
   "compaction": {
     "enabled": false
   },

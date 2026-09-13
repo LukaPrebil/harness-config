@@ -15,8 +15,12 @@ The concise root `AGENTS.md`, which holds only always-needed host-neutral guidan
 _Avoid_: "Codex instructions", "Claude rules" when the guidance applies across hosts.
 
 **Shared skill library**:
-The repo's `skills/` tree, exposed to Claude Code through `~/.claude/skills` and to Codex and Pi through the repo-owned `~/.agents/skills` symlink.
+The repo's `skills/` tree, exposed to Claude Code through `~/.claude/skills` and to every host through the Shared root.
 _Avoid_: "Claude skills", "Codex skills" when the skill follows the shared Agent Skills format.
+
+**Shared root**:
+The repo-owned `~/.agents/` directory, linked on every host, holding the trees a shared skill may name by absolute path: `skills`, `rules`, `scripts`, `templates`, `references`, `agents`, and the pull request template. A shared file names `~/.agents/...`, never a host's own config dir.
+_Avoid_: `~/.claude/...` inside `skills/`, `rules/`, or `agents/` for anything but a genuinely Claude-only mechanism such as hooks.
 
 **Compatibility notation**:
 Legacy Claude-oriented names in shared skills that each agent host interprets through its equivalent capability, including `/name`, `$ARGUMENTS`, `Agent`, and `SendMessage`.
@@ -85,8 +89,8 @@ Another pi session on this machine, addressable directly for coordination; exist
 _Avoid_: "subagent", "teammate" for cross-session peers.
 
 **Advisory persona**:
-A persona whose frontmatter `tools` list excludes Edit/Write/NotebookEdit, making the panel-mode read-only guarantee mechanical rather than brief-level (PR Reviewer, Cybersecurity Expert, GDPR Expert, Product Manager, UX Expert).
-_Avoid_: "read-only agent", "reviewer agent".
+A persona whose frontmatter `tools` list excludes Edit/Write/NotebookEdit, so mutating a file takes a deliberate shell command rather than one tool call (PR Reviewer, Cybersecurity Expert, GDPR Expert, Product Manager, UX Expert). These personas keep Bash, which they need for `git diff` and `gh`, so the brief still carries the read-only instruction.
+_Avoid_: "read-only agent", "reviewer agent", "mechanically read-only" - Bash makes the guarantee partial.
 
 **Writer persona**:
 A full-tool persona that can mutate files and therefore serve as a lane-mode teammate.
@@ -144,6 +148,7 @@ _Avoid_: "soft rules", "style guide".
 
 - Each **Agent host** loads the **Shared instruction source** through its **Host adapter**.
 - Each **Agent host** discovers the same **Shared skill library** through its native user-level path.
+- Every **Agent host** also gets the **Shared root**, so one absolute path in a shared file resolves everywhere.
 - Each **Agent host** maps **Compatibility notation** to its native skill and teammate mechanisms.
 - The **Host bootstrap** installs every **Host adapter** while the legacy Claude setup command remains a compatibility entrypoint.
 - The **Host bootstrap** leaves provider, model, and credential choices to each **Agent host** user.

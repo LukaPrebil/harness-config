@@ -14,6 +14,8 @@ Stay a GitHub fork of `domengabrovsek/agent-config` and make the fork's default 
 
 Amended 2026-09-04: syncs were merges until upstream adopted the multi-host layer in #130 and shrank the fork-only delta to a short commit series.
 
+Amended 2026-09-13: upstream #130 squashed the fork's multi-host commits, so the pre-#130 commits are not patch-equivalent to what upstream holds and a rebase replays already-integrated content. Until that squashed range ages out, a sync lands as a merge of `upstream/main` into a branch cut from `main`; the merge base limits conflicts to files both sides changed.
+
 ## Consequences
 
 - Machine bootstrap is clone-and-apply (the default branch is the config); no checkout dance.

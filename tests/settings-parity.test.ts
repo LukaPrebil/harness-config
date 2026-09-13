@@ -48,12 +48,12 @@ describe('profile settings parity', () => {
     assert.equal(work['defaultThinkingLevel'], 'high');
   });
 
-  it('pins the personal startup identity to glm-5.3-flash on high', () => {
+  it('pins the personal startup identity to deepseek-v4.1-flash on high', () => {
     const personal: ProfileSettings = JSON.parse(
       readFileSync(join(PI_DIR, 'settings.personal.json'), 'utf8'),
     );
     assert.equal(personal['defaultProvider'], 'ollama-cloud');
-    assert.equal(personal['defaultModel'], 'glm-5.3-flash');
+    assert.equal(personal['defaultModel'], 'deepseek-v4.1-flash');
     assert.equal(personal['defaultThinkingLevel'], 'high');
   });
 });

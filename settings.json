@@ -117,9 +117,6 @@
       "Bash(git push origin main *)",
       "Bash(git push * main)",
       "Bash(gh pr merge *)",
-      "Edit(**/package-lock.json)",
-      "Edit(**/yarn.lock)",
-      "Edit(**/pnpm-lock.yaml)",
       "Bash(*DROP TABLE*)",
       "Bash(*DROP DATABASE*)",
       "Bash(*TRUNCATE TABLE*)",
@@ -204,6 +201,24 @@
             "command": "HOOK=\"$CLAUDE_PROJECT_DIR/hooks/prose-gate.sh\"; [ -x \"$HOOK\" ] || HOOK=\"$HOME/.claude/hooks/prose-gate.sh\"; [ -x \"$HOOK\" ] && exec \"$HOOK\" pr",
             "if": "Bash(gh pr create *)",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "HOOK=\"$CLAUDE_PROJECT_DIR/hooks/prose-gate.sh\"; [ -x \"$HOOK\" ] || HOOK=\"$HOME/.claude/hooks/prose-gate.sh\"; [ -x \"$HOOK\" ] && exec \"$HOOK\" pr",
+            "if": "Bash(gh pr edit *)",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "HOOK=\"$CLAUDE_PROJECT_DIR/hooks/pre-pr-body-gate.sh\"; [ -x \"$HOOK\" ] || HOOK=\"$HOME/.claude/hooks/pre-pr-body-gate.sh\"; [ -x \"$HOOK\" ] && exec \"$HOOK\"",
+            "if": "Bash(gh pr create *)",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "HOOK=\"$CLAUDE_PROJECT_DIR/hooks/pre-pr-body-gate.sh\"; [ -x \"$HOOK\" ] || HOOK=\"$HOME/.claude/hooks/pre-pr-body-gate.sh\"; [ -x \"$HOOK\" ] && exec \"$HOOK\"",
+            "if": "Bash(gh pr edit *)",
+            "timeout": 10
           }
         ]
       }

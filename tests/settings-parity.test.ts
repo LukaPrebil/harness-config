@@ -39,12 +39,12 @@ describe('profile settings parity', () => {
     assert.deepEqual(loadSettings('work'), loadSettings('personal'));
   });
 
-  it('pins the work startup identity to gpt-6-astra on high', () => {
+  it('pins the work startup identity to gpt-6-sol on high', () => {
     const work: ProfileSettings = JSON.parse(
       readFileSync(join(PI_DIR, 'settings.work.json'), 'utf8'),
     );
     assert.equal(work['defaultProvider'], 'openai-codex');
-    assert.equal(work['defaultModel'], 'gpt-6-astra');
+    assert.equal(work['defaultModel'], 'gpt-6-sol');
     assert.equal(work['defaultThinkingLevel'], 'high');
   });
 

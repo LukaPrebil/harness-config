@@ -32,7 +32,13 @@ permissions:
 
 jobs:
   notify:
-    if: github.repository == 'domengabrovsek/agent-config'
+    # Review events have no _target variant, so on a fork PR they run in the
+    # fork's context, where vars.* are empty and the send fails. Skip those.
+    if: >-
+      github.repository == 'domengabrovsek/agent-config' &&
+      (github.event.pull_request.head.repo.full_name == github.repository ||
+      (github.event_name != 'pull_request_review' &&
+      github.event_name != 'pull_request_review_comment'))
     uses: domengabrovsek/github-actions/.github/workflows/notify.yml@main
     with:
       api_url: ${{ vars.TELEGRAM_API_URL }}

@@ -144,6 +144,20 @@ _Avoid_: "the lint hook", "the style check".
 The half of the writing policy no regex can check: forced triads, synonym cycling, sentences naming a feeling instead of a mechanism. Lives in the `write-plain` skill, so it triggers on prose work rather than loading every session.
 _Avoid_: "soft rules", "style guide".
 
+### Pi harness
+
+**MCP surface**:
+The MCP tools a pi session can reach, owned either by the `pi-mcp-adapter` extension or by pi's built-in MCP support.
+_Avoid_: "the adapter" (harness-config already uses **Host adapter** for the shared-config translator), "MCP server" (one endpoint, not everything reachable through it).
+
+**Script tool**:
+The pi tool that runs model-written JavaScript against other tools, one per surface: `codemode` for pi's own tools, `mcpScript` for MCP tools under the adapter.
+_Avoid_: "the sandbox", "the code tool" - a script tool is named by the surface its script can reach.
+
+**Jev call site**:
+A place where a Jev classifier verdict changes what the harness does, so each one carries a pre-registered accuracy gate.
+_Avoid_: "Jev use" - ranking tools for a search changes no behavior, so it is not a call site.
+
 ## Relationships
 
 - Each **Agent host** loads the **Shared instruction source** through its **Host adapter**.
@@ -171,6 +185,9 @@ _Avoid_: "soft rules", "style guide".
 - An **Advisory persona** can join **Panel mode** only; a **Lane mode** teammate must be a **Writer persona**.
 - An **Always-loaded rule** competes for attention in every session; an **On-demand rule** does not. A rule with a mechanical trigger (file path or unambiguous phrase) belongs on demand.
 - The **Prose gate** and the **Judgment tier** split one policy by what a regex can see. A pattern that fires on correct usage belongs in the **Judgment tier**, not the gate.
+- A session has exactly one **MCP surface** owner: the built-in MCP extension is disabled by config, not left to whichever extension happens to register `/mcp` first.
+- A **Script tool** reaches one surface only: `codemode` cannot call an MCP tool that the **MCP surface** owner holds.
+- A **Jev call site** ships only after its pre-registered gate is met; a new evidence form or a new model reopens the gate rather than inheriting the old verdict.
 - The distinguishing axis is coordination topology: **Lane mode** is a star (teammates report only to the parent), **Panel mode** is a mesh (teammates also message each other). Worktree isolation follows from this: lanes mutate files so they need worktrees, panels are read-only so they do not.
 
 ## Example dialogue
@@ -187,3 +204,4 @@ _Avoid_: "soft rules", "style guide".
 - "subagent" was used for both the generic spawn mechanism and a named agent - resolved: a named agent is a **Teammate**; "subagent" refers only to the generic Agent-tool spawn.
 - "skill" was used for both sequencing workflows and single practices - resolved: a sequencing skill is an **Orchestrator**, a single-practice skill is a **Reusable discipline**.
 - "full permission parity for pi" was ambiguous - resolved: the pi **Permission gate** enforces a **superset** of the **Deny list** on file tools (Edit rules also bind writes; bash matching covers command segments), so any parity claim names its direction.
+- "adapter" now names two unrelated things - resolved: the shared-config translator is the **Host adapter**, and the pi MCP owner is named as the **MCP surface** owner or as `pi-mcp-adapter`.

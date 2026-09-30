@@ -17,7 +17,7 @@
     "npm:pi-ollama-cloud",
     "npm:pi-subagents",
     "npm:@gotgenes/pi-permission-system@33.0.5",
-    "npm:pi-mcp-adapter@2.36.0",
+    "npm:pi-mcp-adapter@3.3.0",
     "npm:pi-intercom@^0.13.0",
     "npm:pi-web-access"
   ],

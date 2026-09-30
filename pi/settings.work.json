@@ -23,5 +23,11 @@
   ],
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-6-sol",
-  "defaultThinkingLevel": "high"
+  "defaultThinkingLevel": "high",
+  "defaultTools": [
+    "+codemode"
+  ],
+  "extensions": [
+    "-builtin:mcp"
+  ]
 }

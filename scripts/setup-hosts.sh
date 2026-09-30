@@ -519,7 +519,7 @@ if host_enabled pi; then
     esac
     manage_link "$TAG/settings.json" "$PI_DIR/settings.json" "$PI_SETTINGS"
     manage_link "$TAG/models.json" "$PI_DIR/models.json" "$REPO/pi/models.json"
-    manage_link "$TAG/mcp.json" "$PI_DIR/mcp.json" "$REPO/pi/mcp.json"
+    manage_link "$TAG/mcp-adapter.json" "$PI_DIR/mcp-adapter.json" "$REPO/pi/mcp-adapter.json"
     manage_link "$TAG/agents" "$PI_DIR/agents" "$REPO/agents"
   done
 fi

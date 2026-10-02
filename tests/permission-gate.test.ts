@@ -162,6 +162,11 @@ describe('buildPolicyDocument', () => {
     assert.deepEqual(doc.permission.bash, { '*': 'allow' });
   });
 
+  it('rings the terminal when the permission dialog opens', () => {
+    const doc = buildPolicyDocument({ universal: 'allow', pathRead: {}, pathWrite: {}, bash: {}, mcp: {} });
+    assert.deepEqual(doc.promptNotifications, ['osc9']);
+  });
+
   it('serializes deterministically with a trailing newline', () => {
     const doc = buildPolicyDocument({
       universal: 'allow',

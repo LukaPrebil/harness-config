@@ -186,7 +186,7 @@ _Avoid_: "Jev use" - ranking tools for a search changes no behavior, so it is no
 - An **Always-loaded rule** competes for attention in every session; an **On-demand rule** does not. A rule with a mechanical trigger (file path or unambiguous phrase) belongs on demand.
 - The **Prose gate** and the **Judgment tier** split one policy by what a regex can see. A pattern that fires on correct usage belongs in the **Judgment tier**, not the gate.
 - A session has exactly one **MCP surface** owner: the built-in MCP extension is disabled by config, not left to whichever extension happens to register `/mcp` first.
-- A **Script tool** reaches one surface only: `codemode` cannot call an MCP tool that the **MCP surface** owner holds.
+- A **Script tool** reaches its own surface directly and the other only through a gateway: `codemode` calls MCP tools with `mcp` or `mcpScript`, and reaches an individual MCP tool by name only when the **MCP surface** owner declares it script-callable.
 - A **Jev call site** ships only after its pre-registered gate is met; a new evidence form or a new model reopens the gate rather than inheriting the old verdict.
 - The distinguishing axis is coordination topology: **Lane mode** is a star (teammates report only to the parent), **Panel mode** is a mesh (teammates also message each other). Worktree isolation follows from this: lanes mutate files so they need worktrees, panels are read-only so they do not.
 

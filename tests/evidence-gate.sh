@@ -94,6 +94,118 @@ assert_gate "a new commit makes the evidence stale" "$TEST_DIR/wt" 2
 git -C "$REPO" checkout -q -b feat/no-spec
 assert_gate "a branch with no spec passes" "$REPO" 0
 
+git -C "$REPO" checkout -q -b feat/bold
+BOLD_SHA=$(git -C "$REPO" rev-parse HEAD)
+mkdir -p "$STATE/runs/feat-bold"
+cat > "$STATE/specs/2026-10-01-spec-bold.md" <<'SPEC'
+---
+branch: feat/bold
+---
+# Spec: bold
+
+## Acceptance Criteria
+- [ ] **AC-4:** applies in bulk | verify: test src/bulk.test.ts::applies
+- [ ] **AC-4b:** skips warned rows | verify: test src/bulk.test.ts::skips
+SPEC
+BOLD4="| AC-4 | PASS | test src/bulk.test.ts::applies | 1 passed | ${BOLD_SHA:0:7} |"
+BOLD4B="| AC-4b | PASS | test src/bulk.test.ts::skips | 1 passed | ${BOLD_SHA:0:7} |"
+
+bold_ledger() {
+  printf '%s\n' "| AC | status | check | evidence | sha |" "| --- | --- | --- | --- | --- |" "$@" \
+    > "$STATE/runs/feat-bold/evidence.md"
+}
+
+bold_ledger "$BOLD4"
+assert_gate "a bold criterion with a suffixed id and no row blocks" "$REPO" 2
+
+bold_ledger "$BOLD4" "| AC-4b | FAIL | test src/bulk.test.ts::skips | 1 failed | ${BOLD_SHA:0:7} |"
+assert_gate "a FAIL row for a bold criterion blocks" "$REPO" 2
+
+bold_ledger "$BOLD4" "$BOLD4B"
+assert_gate "bold criteria passing at HEAD pass" "$REPO" 0
+
+cat > "$STATE/specs/2026-10-01-spec-bold.md" <<'SPEC'
+---
+branch: feat/bold
+---
+# Spec: bold
+
+## Acceptance Criteria
+- [ ] **AC-4**: applies in bulk | verify: test src/bulk.test.ts::applies
+- [ ] **AC-4b**: skips warned rows | verify: test src/bulk.test.ts::skips
+SPEC
+bold_ledger "$BOLD4"
+assert_gate "a bold id with the colon outside and no row blocks" "$REPO" 2
+
+bold_ledger "$BOLD4" "$BOLD4B"
+assert_gate "bold ids with the colon outside passing at HEAD pass" "$REPO" 0
+
+cat > "$STATE/specs/2026-10-01-spec-bold.md" <<'SPEC'
+---
+branch: feat/bold
+---
+# Spec: bold
+
+## Acceptance Criteria
+- [ ] _AC-4_ applies in bulk | verify: test src/bulk.test.ts::applies
+SPEC
+assert_gate "a criteria section with no parseable criteria blocks" "$REPO" 2
+
+cat > "$STATE/specs/2026-10-01-spec-bold.md" <<'SPEC'
+---
+branch: feat/bold
+---
+# Spec: bold
+
+## Acceptance Criteria
+- [ ] AC-4: applies in bulk | verify: test src/bulk.test.ts::applies
+- [ ] AC-6 - retries once | verify: test src/bulk.test.ts::retries
+SPEC
+assert_gate "one unparseable criterion beside a passing one blocks" "$REPO" 2
+
+cat > "$STATE/specs/2026-10-01-spec-bold.md" <<'SPEC'
+---
+branch: feat/bold
+---
+# Spec: bold
+
+## Acceptance Criteria
+- [ ] AC-4: applies in bulk | verify: test src/bulk.test.ts::applies
+
+## Rollout
+- [ ] tell the team
+SPEC
+assert_gate "a checkbox outside the criteria section is ignored" "$REPO" 0
+
+printf '%s\n' "---" "branch: feat/bold" "---" "## Acceptance Criteria" \
+  "- [ ] AC-4: applies in bulk | verify: test src/bulk.test.ts::applies" \
+  "* [ ] AC-6: retries once | verify: test src/bulk.test.ts::retries" \
+  > "$STATE/specs/2026-10-01-spec-bold.md"
+assert_gate "a star-bulleted criterion with no row blocks" "$REPO" 2
+
+cat > "$STATE/specs/2026-10-01-spec-bold.md" <<'SPEC'
+---
+branch: feat/bold
+---
+# Spec: bold
+
+## Acceptance Criteria
+- [ ] AC-4: applies in bulk | verify: test src/bulk.test.ts::applies
++ [ ] AC-6 retries once | verify: test src/bulk.test.ts::retries
+SPEC
+assert_gate "an unparseable plus-bulleted criterion blocks" "$REPO" 2
+
+cat > "$STATE/specs/2026-10-01-spec-bold.md" <<'SPEC'
+---
+branch: feat/bold
+---
+# Spec: bold
+
+## Acceptance Criteria
+- [ ] AC-5: reads well | verify: manual read the page
+SPEC
+assert_gate "a spec with only manual criteria passes" "$REPO" 0
+
 echo
 echo "$PASSED passed, $FAILED failed"
 [ "$FAILED" -eq 0 ]

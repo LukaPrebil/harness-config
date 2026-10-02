@@ -61,11 +61,24 @@ report() {
   echo "  $1" >&2
 }
 
-# Criteria checked by a test or command; manual ones are skipped.
-AC_IDS=$(grep -E '^- \[.\] AC-[0-9]+:' "$SPEC" | grep -v 'verify: manual' \
-  | sed -E 's/^- \[.\] (AC-[0-9]+):.*/\1/')
+# Criteria checked by a test or command; manual ones are skipped. A criterion is
+# a checkbox under any list marker. Its id may be wrapped in bold markers, with the
+# colon inside or outside them, and may end in a lowercase letter suffix.
+AC_LINE='^[-*+] \[.\] (\*\*)?AC-[0-9]+[a-z]?(\*\*)?:'
+CRITERIA=$(grep -E "$AC_LINE" "$SPEC")
+AC_IDS=$(printf '%s\n' "$CRITERIA" | grep -v 'verify: manual' \
+  | sed -nE 's/^[-*+] \[.\] (\*\*)?(AC-[0-9]+[a-z]?)(\*\*)?:.*/\2/p')
 
-if [ -z "$LEDGER" ]; then
+# A checkbox in the criteria section that the pattern misses would go unchecked.
+UNPARSED=$(awk '/^## /{s=($0 ~ /^## Acceptance Criteria/)} s' "$SPEC" \
+  | grep -E '^[-*+] \[.\] ' | grep -vE "$AC_LINE")
+while IFS= read -r line; do
+  [ -n "$line" ] && report "Could not parse criterion: $line"
+done <<< "$UNPARSED"
+
+if [ -z "$CRITERIA" ] && grep -qE '^## Acceptance Criteria' "$SPEC"; then
+  report "Could not parse any criteria in $(basename "$SPEC"). Write them as '- [ ] AC-1: ...'."
+elif [ -z "$LEDGER" ]; then
   report "No evidence ledger for spec $(basename "$SPEC"). Run the Spec Verifier."
 else
   for ac in $AC_IDS; do

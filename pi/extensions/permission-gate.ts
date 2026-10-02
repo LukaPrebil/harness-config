@@ -151,10 +151,17 @@ export function derivePermissionPolicy(config: Extract<GateConfig, { status: 'ok
 const PERMISSIONS_SCHEMA_URL =
   'https://raw.githubusercontent.com/gotgenes/pi-packages/main/packages/pi-permission-system/schemas/permissions.schema.json';
 
+/* Ring the terminal when the inline permission dialog opens, so a session
+   waiting in another pane is not missed. OSC 9 rather than a bell, so the
+   signal is visible; `notification_handling = "SuppressFromFocusedPane"` in
+   ~/.wezterm.lua keeps a focused pane quiet. */
+const PROMPT_NOTIFICATIONS = ['osc9'];
+
 /** Assemble the full config document the adopted package validates and loads. */
 export function buildPolicyDocument(policy: ReturnType<typeof derivePermissionPolicy>): {
   $schema: string;
   permission: Record<string, unknown>;
+  promptNotifications: string[];
 } {
   const surfaces: Record<string, unknown> = { '*': policy.universal };
   if (Object.keys(policy.pathRead).length > 0) surfaces.path_read = policy.pathRead;
@@ -164,7 +171,7 @@ export function buildPolicyDocument(policy: ReturnType<typeof derivePermissionPo
      package's warning about bash inheriting the top-level allow. */
   surfaces.bash = { '*': policy.universal, ...policy.bash };
   if (Object.keys(policy.mcp).length > 0) surfaces.mcp = policy.mcp;
-  return { $schema: PERMISSIONS_SCHEMA_URL, permission: surfaces };
+  return { $schema: PERMISSIONS_SCHEMA_URL, permission: surfaces, promptNotifications: [...PROMPT_NOTIFICATIONS] };
 }
 
 export function serializePolicyDocument(document: ReturnType<typeof buildPolicyDocument>): string {

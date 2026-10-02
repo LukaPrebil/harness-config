@@ -121,5 +121,8 @@
     "mcp": {
       "claude_ai_Atlassian*": "deny"
     }
-  }
+  },
+  "promptNotifications": [
+    "osc9"
+  ]
 }

@@ -16,9 +16,9 @@
   "packages": [
     "npm:pi-ollama-cloud",
     "npm:pi-subagents",
-    "npm:@gotgenes/pi-permission-system@33.0.5",
+    "npm:@gotgenes/pi-permission-system@37.0.0",
     "npm:pi-mcp-adapter@5.0.0",
-    "npm:pi-intercom@^0.13.0",
+    "npm:pi-intercom@0.16.0",
     "npm:pi-web-access"
   ],
   "defaultProvider": "ollama-cloud",

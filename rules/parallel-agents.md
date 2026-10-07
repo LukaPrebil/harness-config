@@ -13,6 +13,7 @@
 - Launch independent teammates in one message with multiple Agent calls `(review-time: message-shape choice)`
 - Lane mode: wait for completion notifications, do not poll. Panel mode inverts this - coordinate actively via SendMessage during the cross-challenge round `(review-time: behavioral discipline, mode-dependent)`
 - Never let a panel teammate mutate files. Work that needs writes is lane mode `(review-time: mode-selection judgment)`
+- Check each teammate's evidence before accepting its report. A claim with no command output or file reference is unverified `(review-time: requires reading the report against the source)`
 
 ## When not to parallelize
 
@@ -28,4 +29,4 @@ Read-only parallel work (research, grilling, design) runs bounded, never as free
 
 Research panels spawn as `Explore`, whose toolset drops Edit and Write, leaving a write reachable only through Bash. Grill and design panels use the domain personas from `rules/agent-routing.md` with a read-only brief, backstopped by the parent's review `(review-time: agent-type selection)`
 
-Merging finished lanes: see the `worktree-merge` skill.
+Cleaning up merged lanes: see the `worktree-merge` skill.

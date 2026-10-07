@@ -14,7 +14,7 @@ Prefer quality, consistency, efficiency, then speed. Make the smallest complete 
 - Give one action per instruction. Limit noun clusters to three words and paragraphs to six sentences. Use "because" for cause and "since" only for time. Return only a requested table or list.
 - Avoid filler and marketing language. Use `write-plain` for the blocked phrase list.
 - Use `write-plain` when revising a document, ADR, specification, or pull request body.
-- Limits: pull request 150 words; review or reply 120; diary 300; ADR 400. Exceed them only when needed.
+- Limits: chat answer 80 words; pull request 150; review or thread reply 120; diary 300; ADR 400. Exceed them only when needed.
 
 ### Verify before asserting
 
@@ -53,8 +53,9 @@ Use the workflow that matches the user's intent. Do not force research, planning
 
 1. **Research** when entering unfamiliar or uncertain code. Read relevant files, inspect established patterns, and save substantial findings under `.claude/state/research/` when the workflow calls for an artifact.
 2. **Grill** decisions with `grill-with-docs` when alignment is needed. Resolve one decision at a time, update domain language as agreed, and finish with an approved plan under `.claude/state/plans/`.
-3. **Implement** an approved plan with `build`. Work in small complete increments, run the repository's checks, and commit only when the user or active workflow authorizes it.
-4. **Summarize** meaningful completed work under `.claude/state/sessions/` when the workflow requires a session diary.
+3. **Spec and plan** with `spec` and `plan` when criteria need checks. Only the spec needs approval.
+4. **Implement** an approved plan with `build`. Work in small complete increments and run the repository's checks.
+5. **Summarize** meaningful completed work under `.claude/state/sessions/` when the workflow requires a session diary.
 
 For typos, one-line fixes, version bumps, and simple configuration changes, implementation may start directly when the intent is unambiguous. Ask before making an unresolved architectural choice.
 
@@ -62,10 +63,12 @@ The historical `.claude/state/` path is shared workflow state for every host. Do
 
 ## Working with the user
 
+- Keep going when a step does not need the user. Put status notes in the same message as the next action.
+- Stop only when blocked on the user, or before destructive or outward actions beyond a pull request.
 - Ask one question per turn and wait for the answer before asking another.
 - Lead with a recommendation when a decision is needed.
 - Look up facts in the codebase instead of asking the user for discoverable information.
-- Be concise during implementation. Explain decisions and trade-offs when they matter.
+- Keep every reply short. Explain a decision or trade-off when it changes what the user does.
 - Use plain language and avoid em dashes.
 - Include a clickable URL whenever mentioning a linkable external resource such as a pull request, issue, ticket, dashboard, or documentation page.
 
@@ -96,15 +99,14 @@ Load `rulebook` whenever the task needs detailed language, test, database, infra
 
 ## Git and delivery
 
-- Work on a feature branch and never commit directly to `main` or `master`.
+- Work on a feature branch. Never commit or push to `main` or `master`, even with user approval.
 - Use conventional commit messages and do not add AI attribution or co-author trailers.
-- Commit or push only when the user or active workflow authorizes it.
+- Commit, push, and open a pull request for completed feature-branch work without asking.
 - Run the repository's complete quality gate before pushing.
 - Rebase onto the current target branch before opening a pull request.
 - Never force-push or merge a pull request without fresh, explicit user approval.
-- Reply within the relevant review thread. `(review-time: thread context)`
+- Reply in-thread to bots. Draft replies to humans for the user. `(review-time: thread context)`
 - Keep commits focused and reviewable. Split unrelated work and very large changes.
-- Feature implementation normally ends with a commit, push, and pull request.
 - Stop earlier only when the user or parent workflow explicitly scopes the handoff.
 
 ## Delegation

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Post-edit lint hook backing rules/comments.md, rules/typescript.md,
 # rules/database.md and rules/infrastructure.md: code-structure checks on
-# newly added lines, plus a whole-file em-dash autofix.
+# newly added lines, plus an em-dash autofix for prose and whole-line comments.
 #
 # Prose checks (word lists, scaffolding phrases) live in hooks/prose-gate.sh,
 # which also covers commit messages and PR bodies.
@@ -25,13 +25,19 @@ case "$FILE" in
   */node_modules/*|*/.git/*|*/dist/*|*/build/*) exit 0 ;;
 esac
 
-# --- 1. Em-dash auto-fix (whole file, idempotent, silent) ---
+# --- 1. Em-dash auto-fix (idempotent, silent) ---
+# Prose files get the whole file. Anywhere else only whole-line comments do:
+# an em dash inside a string literal is data, such as a test's expected text.
 if LC_ALL=C grep -q $'\xe2\x80\x94' "$FILE" 2>/dev/null; then
+  case "$FILE" in
+    *.md|*.markdown|*.txt|*.rst|*.adoc|*.tex) EM_SCOPE='' ;;
+    *) EM_SCOPE='/^[[:space:]]*(\/\/|\/\*|\*|#|--)/' ;;
+  esac
   # BSD sed needs an argument to -i, GNU sed refuses one. Write through a
   # temp file so the hook behaves the same on macOS and Linux.
   TMP_FILE=$(mktemp "${TMPDIR:-/tmp}/post-edit-lint.XXXXXX")
-  if LC_ALL=C sed $'s/\xe2\x80\x94/-/g' "$FILE" > "$TMP_FILE" 2>/dev/null; then
-    cat "$TMP_FILE" > "$FILE"
+  if LC_ALL=C sed -E "${EM_SCOPE}s/"$'\xe2\x80\x94'"/-/g" "$FILE" > "$TMP_FILE" 2>/dev/null; then
+    cmp -s "$FILE" "$TMP_FILE" || cat "$TMP_FILE" > "$FILE"
   fi
   rm -f "$TMP_FILE"
 fi
@@ -108,7 +114,7 @@ case "$FILE" in
       'description[[:space:]]*=.*(\b[A-Z]{2,}-[0-9]+\b|[[:space:]]#[0-9]+\b|\b[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9]+\b|\b[Aa][Dd][Rr][[:space:]-]+[0-9]+\b|\b(Fixes|Closes|Refs|Resolves)[[:space:]]+(#|[A-Z]{2,}-))' \
       2>/dev/null || true)
     if [ -n "$TF_DESC_REFS" ]; then
-      VIOLATIONS+="Tracker reference inside Terraform description attribute. rules/comments.md: descriptions surface in terraform-docs and module-consumer docs - tracker refs belong in PR descriptions, ADR files, and git blame:
+      VIOLATIONS+="Tracker reference inside Terraform description attribute. rules/infrastructure.md: descriptions surface in terraform-docs and module-consumer docs - tracker refs belong in PR descriptions, ADR files, and git blame:
 $TF_DESC_REFS
 
 "
@@ -129,10 +135,10 @@ $VAR_DECL
     ;;
 esac
 
-# --- 7. New TODO/FIXME/XXX/HACK markers in code (engineering-principles: complete code only) ---
+# --- 7. New TODO/FIXME/XXX/HACK markers in code (rules/comments.md: no markers) ---
 TODOS=$(echo "$ADDED" | grep -nE '\b(TODO|FIXME|XXX|HACK)\b' 2>/dev/null || true)
 if [ -n "$TODOS" ]; then
-  VIOLATIONS+="TODO / FIXME / XXX / HACK marker. rules/engineering-principles.md: complete code only - no placeholders. Either finish the work now or open a tracked issue and remove the marker:
+  VIOLATIONS+="TODO / FIXME / XXX / HACK marker. rules/comments.md: no TODO, FIXME, XXX, or HACK markers. Either finish the work now or open a tracked issue and remove the marker:
 $TODOS
 
 "

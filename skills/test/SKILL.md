@@ -27,7 +27,7 @@ Write tests for: $ARGUMENTS
 2. **Confirm RED**: run the test - it must fail, proving the bug exists in code `(review-time: see section note)`
 3. **Fix**: implement the minimum change to fix the root cause `(review-time: see section note)`
 4. **Confirm GREEN**: run the test - it must now pass `(review-time: see section note)`
-5. **Regression**: run the full test suite to verify nothing else broke `(review-time: see section note)`
+5. **Regression**: run `npm run verify:fast` when package.json declares it, otherwise the full test suite. The full suite runs once per PR in `npm run verify` `(review-time: see section note)`
 
 If you cannot write a failing test, you do not fully understand the bug. Investigate further.
 
@@ -35,11 +35,11 @@ If you cannot write a failing test, you do not fully understand the bug. Investi
 
 A **seam** is the public boundary you test at: the interface where you observe behaviour without reaching inside. Tests live at seams, never against internals.
 
-**Test only at pre-agreed seams.** Before writing any test, write down the seams under test and confirm them with the user - no test is written at an unconfirmed seam. `(review-time: seam agreement is a conversational step, not pattern-checkable)` You can't test everything; agreeing the seams up front lands testing effort on the critical paths and complex logic instead of every edge case.
+**Test only at pre-agreed seams.** Use the seams in the spec's Seams section. With no spec, write down the seams under test and confirm them with the user - no test is written at an unconfirmed seam. `(review-time: seam agreement is a conversational step, not pattern-checkable)` You can't test everything; agreeing the seams up front lands testing effort on the critical paths and complex logic instead of every edge case.
 
 ## Test Level Selection
 
-Pick the lowest level that captures the behavior (see `references/testing-patterns.md`):
+Pick the lowest level that captures the behavior (see `~/.agents/references/testing-patterns.md`):
 
 | Behavior | Test Level | Why |
 | --- | --- | --- |
@@ -67,4 +67,4 @@ Before considering tests complete:
 - [ ] Mocks only at module boundaries - not on internal code `(review-time: see section note)`
 - [ ] Test names read like specifications `(review-time: see section note)`
 - [ ] All tests pass, no flaky behavior `(review-time: see section note)`
-- [ ] Run full test suite to check for regressions `(review-time: see section note)`
+- [ ] Regression run done: `npm run verify:fast` when declared, otherwise the full test suite `(review-time: see section note)`

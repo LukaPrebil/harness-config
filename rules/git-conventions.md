@@ -4,22 +4,22 @@
 
 ## Already enforced
 
-Hooks and deny rules back these. Know them so you do not waste a cycle hitting the gate.
+Hooks and deny rules back these. Know them to avoid hitting the gate.
 
 - Conventional commit format. Scope optional: `feat(auth): add token refresh` `(hook)`
-- No AI attribution anywhere: no Co-Authored-By, no "Generated with" footer, in commits, PR titles and bodies, issues, or comments `(hook)`
-- Check the branch with `git branch --show-current` before committing. Never commit or push to main/master `(hook)`
-- Rebase onto the target branch (`git fetch origin main && git rebase origin/main`) before opening a PR `(hook)`
-- Run `/verify-done` before any push `(hook)`
+- No AI attribution in commits, PR titles, PR bodies, or issues: no Co-Authored-By, no "Generated with" footer `(hook)`
+- Comments you post end with the agent footer from `pr-comments` `(hook)`
+- Check the branch with `git branch --show-current` before committing. Never commit or push to main/master, even when the user approves it. Every change lands through a PR `(hook)`
+- Rebase onto the target branch (`git fetch origin main && git rebase origin/main`) before opening a PR. Update an open PR with `gh pr update-branch`, never a force-push `(review-time: no hook checks this)`
+- Pushes run the repo's `verify:fast` when declared. Open or ready a PR only after `npm run verify` passes at HEAD `(hook)`
 
 ## Judgment calls
 
-- Never auto-commit or push. Wait to be told `(review-time: depends on a conversational signal, not a pattern)`
-- Never force-push without asking immediately before the push. Approval of a plan containing a force-push is not approval of the push. Ask every time, at execution time. Teammates report back for confirmation rather than pushing `(review-time: needs a fresh confirmation at execution time; deny rules block bare --force)`
+- Commit, push, and open the PR for feature-branch work without asking once its checks pass `(review-time: requires judging that the checks ran)`
+- Never force-push without asking immediately before the push. Approval of a plan containing a force-push is not approval of the push. Teammates report a needed force-push back rather than running it `(review-time: needs a fresh confirmation at execution time; deny rules block bare --force)`
 - Never merge a PR. The user merges `(review-time: depends on a user signal, not a pattern)`
-- Open a PR once a feature is complete, without being asked `(review-time: requires judging completion)`
 - PR descriptions use bullets, not prose paragraphs `(review-time: formatting of free-form text)`
-- Never reference `.claude/state/` plans, research, or diaries in a PR description. They are untracked and invisible to reviewers `(review-time: formatting of free-form text)`
+- Never reference `.claude/state/` plans, research, or diaries in a PR description. They are untracked and invisible to reviewers `(hook)`
 - After pushing new commits to an open PR, update its title and body with `gh pr edit` `(review-time: requires judging whether the body still reflects the diff)`
 - Use the repo's `.github/pull_request_template.md` when it exists, otherwise `~/.agents/pull_request_template.md` `(review-time: template selection requires reading the directory)`
 - Editing tests? Update mocks to match the new DB queries, service dependencies, and imports `(review-time: requires understanding mock-target coupling)`

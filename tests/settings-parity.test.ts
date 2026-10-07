@@ -1,8 +1,9 @@
 /**
- * Parity tests for the pi Profile settings pair. Startup identity is
- * per-Profile; every other key is shared and must stay identical across
- * settings.work.json and settings.personal.json, so a repo edit made in one
- * file cannot silently skip the other.
+ * Parity tests for the pi Profile settings pair. Startup identity and the
+ * Profile's own hook-bridge path are per-Profile; every other key is shared
+ * and must stay identical across settings.work.json and
+ * settings.personal.json, so a repo edit made in one file cannot silently
+ * skip the other.
  */
 
 import assert from 'node:assert/strict';
@@ -26,11 +27,26 @@ const PER_PROFILE_KEYS = [
 
 type ProfileSettings = Record<string, unknown>;
 
+/**
+ * The hook bridge sits in each Profile's own agent dir, so only that path
+ * differs; every other subagents setting stays shared and is still compared.
+ */
+function normalizeProfileBridge(settings: ProfileSettings): void {
+  const subagents = settings['subagents'];
+  if (subagents === null || typeof subagents !== 'object') return;
+  const entries = (subagents as Record<string, unknown>)['defaultSubagentOnlyExtensions'];
+  if (!Array.isArray(entries)) return;
+  (subagents as Record<string, unknown>)['defaultSubagentOnlyExtensions'] = entries.map(
+    (entry) => String(entry).replace('/.pi-personal/agent/', '/.pi/agent/'),
+  );
+}
+
 function loadSettings(profile: 'work' | 'personal'): ProfileSettings {
   const raw: ProfileSettings = JSON.parse(
     readFileSync(join(PI_DIR, `settings.${profile}.json`), 'utf8'),
   );
   for (const key of PER_PROFILE_KEYS) delete raw[key];
+  normalizeProfileBridge(raw);
   return raw;
 }
 

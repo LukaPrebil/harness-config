@@ -1,3 +1,16 @@
+# [0.8.0](https://github.com/LukaPrebil/harness-config/compare/v0.7.0...v0.8.0) (2026-10-08)
+
+
+### Bug Fixes
+
+* **hooks:** drop the stale herdr SessionStart entry ([8cf6e44](https://github.com/LukaPrebil/harness-config/commit/8cf6e44e4d69d26ca9eb7b9810344c2eaf3b6674))
+* **tests:** scan tracked files in the shared-paths check ([9810d23](https://github.com/LukaPrebil/harness-config/commit/9810d236c8c08e96d9b52df2e6577e450422b37c))
+
+
+### Features
+
+* **shims:** track the account shims and link them from the bootstrap ([48e3b43](https://github.com/LukaPrebil/harness-config/commit/48e3b432ca5071dd45d529295f3c1097d1006f0d))
+
 # [0.7.0](https://github.com/LukaPrebil/harness-config/compare/v0.6.0...v0.7.0) (2026-10-08)
 
 

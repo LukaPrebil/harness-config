@@ -74,6 +74,10 @@ _Avoid_: "Claude state" - the path is retained for compatibility, but ownership 
 One of the two Pi account scopes, work or personal; a Profile's config directory is selected by the account shim, and each Profile consumes its own startup settings file.
 _Avoid_: "account" for the scope itself - the account shim answers work or personal, the Profile is the resulting configuration scope.
 
+**Account shim**:
+The `~/bin/<host>` wrapper that picks a Profile from the working directory, sets that host's config-dir variable, then execs the real binary.
+_Avoid_: "launcher" - reserve that for Pi's managed-install entrypoint.
+
 **MCP surface**:
 The MCP tools a Pi session can reach, owned either by the `pi-mcp-adapter` extension or by Pi's built-in MCP support.
 _Avoid_: "the adapter" (the repo already uses **Host adapter** for the shared-config translator), "MCP server" (one endpoint, not everything reachable through it).
@@ -81,6 +85,14 @@ _Avoid_: "the adapter" (the repo already uses **Host adapter** for the shared-co
 **Script tool**:
 The Pi tool that runs model-written JavaScript against other tools, one per surface: `codemode` for Pi's own tools, `mcpScript` for MCP tools under the adapter.
 _Avoid_: "the sandbox", "the code tool" - a script tool is named by the surface its script can reach.
+
+**Managed install**:
+Pi's pinned-dependency install layout, created by the pi.dev installer, that runs releases from one tree outside the agent dirs and updates atomically through `pi update`.
+_Avoid_: "native install", "installer install".
+
+**Managed launcher**:
+Pi's managed-install entrypoint script, which reads the active release version, execs that release, and exports the managed root for `pi update`.
+_Avoid_: "shim" - the account shim routes Profiles, the launcher selects a release.
 
 ### Agent orchestration
 
@@ -223,3 +235,4 @@ _Avoid_: "soft rules", "style guide".
 - "subagent" was used for both the generic spawn mechanism and a named agent - resolved: a named agent is a **Teammate**; "subagent" refers only to the generic Agent-tool spawn.
 - "skill" was used for both sequencing workflows and single practices - resolved: a sequencing skill is an **Orchestrator**, a single-practice skill is a **Reusable discipline**.
 - "full permission parity for pi" was ambiguous - resolved: the Pi **Permission gate** enforces a **superset** of the **Deny list** on file tools (Edit rules also bind writes; bash matching covers command segments), so any parity claim names its direction.
+- "install" named three different things - resolved: how the Pi binary itself is present is a **Managed install** or an npm install; `pi install <source>` installs a Pi package; the **Host bootstrap** installs links. Name which one.

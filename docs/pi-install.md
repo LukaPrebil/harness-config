@@ -15,7 +15,7 @@ Pi runs as a managed install, not an npm global package. A managed install keeps
 
 ## Entrypoint
 
-`~/bin/pi` is the only `pi` reachable by name. It selects a Profile from the working directory, sets the matching config dir, and execs the launcher by absolute path. The launcher reads `current-version`, runs that release, and exports `PI_MANAGED_INSTALL_ROOT` so `pi update` knows which installation it is updating.
+`~/bin/pi` is the only `pi` reachable by name, and the bootstrap links it from `shims/pi`. It selects a Profile from the working directory, sets the matching config dir, and execs the launcher by absolute path. The launcher reads `current-version`, runs that release, and exports `PI_MANAGED_INSTALL_ROOT` so `pi update` knows which installation it is updating.
 
 `~/.local/bin` stays off PATH. The launcher is reachable only through the shim, so nothing can resolve `pi` past the Profile routing.
 

@@ -74,6 +74,10 @@ new_case() {
   : > "$TEST_REPO/pi/models.json"
   : > "$TEST_REPO/pi/mcp-adapter.json"
   : > "$TEST_REPO/pi/extensions/statusline.ts"
+  mkdir -p "$TEST_REPO/shims"
+  : > "$TEST_REPO/shims/pi"
+  : > "$TEST_REPO/shims/claude"
+  : > "$TEST_REPO/shims/agent-account"
 }
 
 run_setup() {
@@ -179,6 +183,7 @@ references|references
 agents|agents
 pull_request_template.md|.github/pull_request_template.md
 EOF
+assert_true "all-host apply links every account shim" assert_link "$TEST_HOME/bin/pi" "$TEST_REPO/shims/pi" && assert_link "$TEST_HOME/bin/claude" "$TEST_REPO/shims/claude" && assert_link "$TEST_HOME/bin/agent-account" "$TEST_REPO/shims/agent-account"
 assert_true "Codex fallback is created" grep -Fq 'project_doc_fallback_filenames = ["CLAUDE.md"]' "$TEST_HOME/.codex/config.toml"
 assert_true "Codex status line is created" grep -Fq 'status_line = ["project-name", "git-branch", "model-with-reasoning", "context-used", "five-hour-limit", "weekly-limit", "thread-credits", "estimated-thread-cost"]' "$TEST_HOME/.codex/config.toml"
 assert_true "Codex long context is created" grep -Fq 'model_context_window = 1050000' "$TEST_HOME/.codex/config.toml"
@@ -196,12 +201,15 @@ assert_true "Pi-only apply links shared skills" assert_link "$TEST_HOME/.agents/
 assert_true "Pi-only apply links shared scripts" assert_link "$TEST_HOME/.agents/scripts" "$TEST_REPO/scripts"
 assert_true "Pi-only apply links shared templates" assert_link "$TEST_HOME/.agents/templates" "$TEST_REPO/templates"
 assert_true "Pi-only apply skips Codex" test ! -e "$TEST_HOME/.codex"
+assert_true "Pi-only apply links the pi shim and the router" assert_link "$TEST_HOME/bin/pi" "$TEST_REPO/shims/pi" && assert_link "$TEST_HOME/bin/agent-account" "$TEST_REPO/shims/agent-account"
+assert_true "Pi-only apply leaves the claude shim alone" test ! -e "$TEST_HOME/bin/claude"
 assert_success "Pi-only check exits zero" run_setup --check --host pi
 assert_success "Pi-only re-apply is idempotent" run_setup --apply --host pi
 assert_true "Pi-only re-apply creates no instruction backup" test "$(backup_count "$TEST_HOME/.pi/agent/AGENTS.md")" -eq 0
 assert_true "Pi-only re-apply preserves MCP link" assert_link "$TEST_HOME/.pi/agent/mcp-adapter.json" "$TEST_REPO/pi/mcp-adapter.json"
 assert_true "Pi-only re-apply creates no MCP backup" test "$(backup_count "$TEST_HOME/.pi/agent/mcp-adapter.json")" -eq 0
 assert_true "Pi-only re-apply creates no skill backup" test "$(backup_count "$TEST_HOME/.agents/skills")" -eq 0
+assert_true "Pi-only re-apply creates no shim backup" test "$(backup_count "$TEST_HOME/bin/pi")" -eq 0
 
 # Pi follows its native config-directory override.
 new_case pi_custom_dir
@@ -239,10 +247,26 @@ assert_true "Pi-only adopt backs up instructions" test "$(backup_count "$TEST_HO
 assert_true "Pi-only adopt backs up personal instructions" test "$(backup_count "$TEST_HOME/.pi-personal/agent/AGENTS.md")" -eq 1
 assert_true "Pi-only adopt backs up shared skills" test "$(backup_count "$TEST_HOME/.agents/skills")" -eq 1
 
+# A machine that predates tracking the shims has real files in ~/bin. They are
+# conflicts like any other real path: refused until adopted, then kept as a
+# backup beside the link.
+new_case shim_adopt
+mkdir -p "$TEST_HOME/bin"
+printf '#!/bin/sh\n: hand-maintained\n' > "$TEST_HOME/bin/pi"
+assert_failure "apply refuses a real shim" run_setup --apply --host pi
+assert_true "refused shim is preserved" test -f "$TEST_HOME/bin/pi"
+assert_true "refused shim is not replaced" test ! -L "$TEST_HOME/bin/pi"
+assert_success "adopt replaces the real shim" run_setup --apply --adopt --host pi
+assert_true "adopt installs the shim link" assert_link "$TEST_HOME/bin/pi" "$TEST_REPO/shims/pi"
+assert_true "adopt backs up the shim" test "$(backup_count "$TEST_HOME/bin/pi")" -eq 1
+assert_true "adopt keeps the shim content" grep -Fq "hand-maintained" "$TEST_HOME/bin/pi".bak.*
+assert_success "check is clean after adopting the shim" run_setup --check --host pi
+
 # A Codex-only selection includes the shared skills it discovers.
 new_case codex_only
 assert_success "Codex-only apply succeeds" run_setup --apply --host codex
 assert_true "Codex-only apply links instructions" assert_link "$TEST_HOME/.codex/AGENTS.md" "$TEST_REPO/AGENTS.md"
+assert_true "Codex-only apply installs no account shim" test ! -e "$TEST_HOME/bin/pi" && test ! -e "$TEST_HOME/bin/claude" && test ! -e "$TEST_HOME/bin/agent-account"
 assert_true "Codex-only apply links shared skills" assert_link "$TEST_HOME/.agents/skills" "$TEST_REPO/skills"
 assert_true "Codex-only apply skips Pi" test ! -e "$TEST_HOME/.pi"
 

@@ -1,0 +1,27 @@
+#!/bin/sh
+# PATH shim routing claude at the work or personal config dir, mirroring
+# ~/bin/pi. A script rather than a shell function because functions only exist
+# in interactive shells, and agent-spawned invocations are the ones that most
+# need routing.
+
+real_claude=/opt/homebrew/bin/claude
+
+if [ ! -x "$real_claude" ]; then
+	echo "claude shim: $real_claude is missing or not executable" >&2
+	exit 127
+fi
+
+# An explicitly set value is a stated intention and outranks the path rule, so
+# a nested claude keeps its parent session's account even when the worktree it
+# runs in sits outside the parent's tree.
+if [ -z "$CLAUDE_CONFIG_DIR" ]; then
+	# Absolute path: the shim may be invoked from a context whose PATH does not
+	# carry ~/bin.
+	if [ "$("$HOME/bin/agent-account")" = personal ]; then
+		CLAUDE_CONFIG_DIR="$HOME/.claude-personal"
+		export CLAUDE_CONFIG_DIR
+	fi
+fi
+
+# Absolute path so the shim cannot re-invoke itself through PATH.
+exec "$real_claude" "$@"

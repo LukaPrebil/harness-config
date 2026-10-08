@@ -689,6 +689,18 @@ if host_enabled pi; then
   done
 fi
 
+# The account shims route each host at the right config dir. They are PATH entry
+# wrappers, so they are tracked under shims/ and linked beside the host links in
+# ~/bin, which has to stay ahead of the real binaries on PATH.
+SHIM_LINKS=""
+if host_enabled claude; then SHIM_LINKS="$SHIM_LINKS claude"; fi
+if host_enabled pi; then SHIM_LINKS="$SHIM_LINKS pi"; fi
+if [ -n "$SHIM_LINKS" ]; then SHIM_LINKS="$SHIM_LINKS agent-account"; fi
+for SHIM in $SHIM_LINKS; do
+  TAG="$(printf %s "$HOME/bin/$SHIM" | sed "s#^$HOME#~#")"
+  manage_link "$TAG" "$HOME/bin/$SHIM" "$REPO/shims/$SHIM"
+done
+
 # ~/.agents is the host-neutral root. Shared skills, rules-adjacent resources
 # and personas resolve there on every host, so a shared skill can name one
 # path instead of a Claude-specific one that Codex and Pi never see. An

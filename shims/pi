@@ -1,0 +1,33 @@
+#!/bin/sh
+# PATH shim routing pi at the work or personal config dir. This is a script
+# rather than a shell function because functions only exist in interactive
+# shells, and the invocations that most need routing are the ones agents and
+# scripts spawn non-interactively. It also maps the personal-only TypeSafe key
+# into TYPESAFE_API_KEY, so Jev stays on the personal Profile.
+
+real_pi="$HOME/.local/bin/pi"
+
+if [ ! -x "$real_pi" ]; then
+	echo "pi shim: $real_pi is missing or not executable" >&2
+	exit 127
+fi
+
+# An explicitly set value is a stated intention and outranks the path rule, so
+# a nested pi keeps its parent session's account even when the worktree it runs
+# in sits outside the parent's tree.
+if [ -z "$PI_CODING_AGENT_DIR" ]; then
+	# Absolute path: the shim may be invoked from a context whose PATH does not
+	# carry ~/.local/bin.
+	if [ "$("$HOME/bin/agent-account")" = personal ]; then
+		PI_CODING_AGENT_DIR="$HOME/.pi-personal/agent"
+		export PI_CODING_AGENT_DIR
+		# An explicit key outranks the mapping, matching the config-dir rule above.
+		if [ -z "$TYPESAFE_API_KEY" ] && [ -n "$PI_TYPESAFE_PERSONAL_KEY" ]; then
+			TYPESAFE_API_KEY="$PI_TYPESAFE_PERSONAL_KEY"
+			export TYPESAFE_API_KEY
+		fi
+	fi
+fi
+
+# Absolute path so the shim cannot re-invoke itself through PATH.
+exec "$real_pi" "$@"

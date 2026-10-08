@@ -42,6 +42,9 @@ done
 : > "$FAKE_REPO/settings.json"
 : > "$FAKE_REPO/scripts/statusline.sh"
 : > "$FAKE_REPO/.github/pull_request_template.md"
+mkdir -p "$FAKE_REPO/shims"
+: > "$FAKE_REPO/shims/claude"
+: > "$FAKE_REPO/shims/agent-account"
 
 # The manifest the bootstrap creates, read from the bootstrap itself so this
 # test cannot become the third copy of the list it exists to prevent.
@@ -71,6 +74,15 @@ link_all() {
   done <<EOF
 $(manifest)
 EOF
+}
+
+# The audited host also owns its own shim plus the router both hosts call.
+link_shims() {
+  local dir="$TEST_HOME/bin" shim
+  mkdir -p "$dir"
+  for shim in claude agent-account; do
+    ln -sfn "$FAKE_REPO/shims/$shim" "$dir/$shim"
+  done
 }
 
 run_hook() {
@@ -109,6 +121,7 @@ assert_reports() {
 
 TEST_HOME="$TEST_ROOT/home"
 link_shared
+link_shims
 
 # A fully linked dir is silent.
 CONVERGED="$TEST_HOME/.claude-converged"
@@ -123,6 +136,12 @@ for entry in docs references templates; do
   rm -f "$PARTIAL/$entry"
   assert_reports "missing $entry is reported" "$PARTIAL" "/${entry}[[:space:]]+MISSING"
 done
+
+# The shim link belongs to the audited host too, so its absence is drift.
+SHIM_GAP="$TEST_HOME/.claude-shim-gap"
+link_all "$SHIM_GAP"
+rm -f "$TEST_HOME/bin/claude"
+assert_reports "missing account shim is reported" "$SHIM_GAP" "/bin/claude[[:space:]]+MISSING"
 
 # A link pointing at the wrong target is drift, not convergence.
 WRONG="$TEST_HOME/.claude-wrong"

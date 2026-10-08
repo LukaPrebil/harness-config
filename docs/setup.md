@@ -120,16 +120,16 @@ Codex runs `symlink-check.sh` at session start, but that hook checks only the Cl
 
 ## Pi
 
-Install Pi separately, then link it:
+Install Pi separately with the [pi.dev installer](https://pi.dev), then link it. This machine runs a managed install; [Pi install layout](pi-install.md) records where it puts things.
 
 ```bash
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+curl -fsSL https://pi.dev/install.sh | sh
 bash scripts/setup-hosts.sh --apply --host pi
 ```
 
 The Pi resources live in `pi/`. Shared skills come from `~/.agents/skills`, and `package.json` also declares this repo as a Pi package. The linked resources apply in interactive, print, JSON, and RPC modes, except the status line and herdr extensions, which run only in the TUI. See [Pi's usage documentation](https://pi.dev/docs/latest/usage).
 
-The bootstrap does not install or upgrade Pi. It does not manage credentials, project trust, tools, or isolation. The linked `pi/settings.json` and `pi/models.json` do set the default provider, default model, and package list. Pi has no built-in sandbox, so unattended work needs an external boundary. See [Pi's security guidance](https://pi.dev/docs/latest/security). Auto-compaction stays off: a long session gets handed off or stopped, not silently summarized.
+The bootstrap does not install or upgrade Pi; updates arrive through `pi update` on the managed install. It does not manage credentials, project trust, tools, or isolation. The linked `pi/settings.json` and `pi/models.json` do set the default provider, default model, and package list. Pi has no built-in sandbox, so unattended work needs an external boundary. See [Pi's security guidance](https://pi.dev/docs/latest/security). Auto-compaction stays off: a long session gets handed off or stopped, not silently summarized.
 
 ### Extensions
 

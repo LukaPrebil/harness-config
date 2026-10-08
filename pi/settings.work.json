@@ -24,6 +24,11 @@
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-6.1-sol",
   "defaultThinkingLevel": "high",
+  "subagents": {
+    "defaultSubagentOnlyExtensions": [
+      "~/.pi/agent/extensions/hook-bridge.ts"
+    ]
+  },
   "defaultTools": [
     "+codemode"
   ],

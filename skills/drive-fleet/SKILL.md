@@ -21,7 +21,7 @@ The built-in `/goal` command keeps the session working across turns until the co
 
 Template (fill the `{knobs}`):
 
-> Every open MR/PR from `{plan}` is CI-green, reviewed (`{review_depth}` applied via review-pr), and rebased on `{target_branch}`. `{post_completion_action}`
+> Every open MR/PR from `{plan}` is CI-green, reviewed (`{review_depth}` applied via review-pr), rebased on `{target_branch}`, and passes every automated spec criterion at HEAD. `{post_completion_action}`
 
 | Knob | Default |
 | --- | --- |
@@ -31,7 +31,7 @@ Template (fill the `{knobs}`):
 
 ## Phase 1 - Plan via grills
 
-1. Run `/grill-with-docs` (add `grill-me` if you have it installed) to pressure-test the approach against the existing domain model, sharpen terminology, and emit CONTEXT.md terms inline. `(review-time: see section note)`
+1. Run `/grill-with-docs` to pressure-test the approach against the existing domain model, sharpen terminology, and emit CONTEXT.md terms inline. `(review-time: see section note)`
 2. Output: an execution plan in `.claude/state/plans/` that defines the lanes / MRs and **proves they are file-isolated** - no two lanes touch the same file. `(review-time: see section note)`
 
 The plan is the contract. Approving it and setting the `/goal` is your batched authorization for the fleet (see [orchestration.md](orchestration.md)).
@@ -73,7 +73,7 @@ The agent runs `/grill-with-docs`, proves the lanes share no files, writes the p
 Execute the plan at .claude/state/plans/2026-06-02-feature-flags.md
 ```
 
-The manager builds the three lanes in parallel worktrees, opens the MRs (you approve the batch once), then drives CI-fix / review / rebase per repo until the goal clears. Your only inputs after that are the batch approval and any escalation.
+The manager builds the three lanes in parallel worktrees, opens the MRs, then drives CI-fix / review / rebase per repo until the goal clears. Your only input after that is any escalation.
 
 ## Details
 
@@ -81,4 +81,4 @@ Manager orchestration loop, authorization model, guardrails, and the per-repo bl
 
 ## Delegates to
 
-`/grill-with-docs`, `/mr`, `/ci`, `/review-pr`, `/worktree`; agent personas Frontend Staff Engineer, Backend Staff Engineer, and PR Reviewer (via Agent `subagent_type`).
+`/grill-with-docs`, `/mr`, `/ci`, `/pr-comments`, `/review-pr`, `/worktree`; agent personas Frontend Staff Engineer, Backend Staff Engineer, and PR Reviewer (via Agent `subagent_type`).

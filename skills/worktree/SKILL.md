@@ -1,6 +1,6 @@
 ---
 name: worktree
-description: "Creates an isolated git worktree for the current task and switches into it, resolving cross-session collisions before they happen. Use when the user says '/worktree <slug>' or wants an isolated working copy for a new task."
+description: "Creates an isolated git worktree for the current task and switches into it, so the task never collides with the main checkout. Use when the user says '/worktree <slug>' or wants an isolated working copy for a new task."
 ---
 
 Create a worktree for: $ARGUMENTS
@@ -12,7 +12,7 @@ If $ARGUMENTS is non-empty, treat the first argument as the slug.
 If $ARGUMENTS is empty:
 
 - If a plan file exists at `.claude/state/plans/<latest>.md` in the current project, derive slug from its basename (strip date prefix and `.md` extension).
-- Else generate `<topic>-<6char-hex>` and ask the user to confirm.
+- Else generate `<topic>-<6char-hex>` and report it.
 
 The slug must be lowercase, hyphen-separated, no spaces.
 
@@ -31,12 +31,13 @@ Default to `feat/<slug>`. If the user's request looks like a bug fix, use `fix/<
    ```
 
 4. `cd` into the worktree dir for all subsequent operations.
-5. If `package-lock.json` exists, run `npm ci`. The worktree holds only tracked files, and the pre-push gate needs `node_modules`.
-6. Show the user the new working dir, branch name, and confirm next steps.
+5. If `package-lock.json` exists, run `npm ci`. If only `package.json` exists, run `npm install --no-package-lock`, because `npm ci` needs a lockfile. The worktree holds only tracked files, and the push hooks need `node_modules`.
+6. If `git config core.hooksPath` is `.husky/_`, check that `.husky/_` exists. If it does not, stop and report it: git skips every repo hook without a word, and the pre-push gate blocks the push.
+7. Report the new working dir and branch name, then continue with the task.
 
 ## After creation
 
-The worktree is its own working tree - the PreToolUse guard auto-bypasses inside it. The session can continue mutating files freely without colliding with the main checkout's session.
+The worktree is its own working tree, so the session can change files without colliding with the main checkout.
 
 When work is done:
 

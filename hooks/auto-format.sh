@@ -1,7 +1,10 @@
 #!/bin/bash
 # Auto-format files after Write/Edit tool use.
-# Detects project formatter (Biome > Prettier) and formats accordingly.
+# Formats with Prettier; a Biome project is formatted by post-edit-typecheck.sh.
 # Exits 0 always (non-blocking) - formatting failure should not block edits.
+
+# shellcheck source=lib/find-up.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/find-up.sh"
 
 FILE=$(jq -r '.tool_input.file_path // empty' 2>/dev/null)
 
@@ -30,9 +33,11 @@ done
 
 cd "$PROJECT_ROOT" || exit 0
 
-# Try Biome first (if configured)
-if [ -f "biome.json" ] || [ -f "biome.jsonc" ]; then
-  npx biome format --write "$FILE" 2>/dev/null && exit 0
+# hooks/post-edit-typecheck.sh runs `biome check --write` on the same file.
+# Both hooks run at once, so formatting here too would race its write. A
+# workspace package inherits the Biome config at the monorepo root.
+if find_up . biome.json biome.jsonc >/dev/null; then
+  exit 0
 fi
 
 # Try Prettier (if configured or available)

@@ -47,8 +47,8 @@ emit() {
 }
 
 # The hook's own cwd is not the tool call's, so the repo comes from the
-# payload. Reading only CLAUDE_PROJECT_DIR made every probe report
-# "unavailable=not-a-repo" whenever the harness ran hooks from elsewhere.
+# payload. CLAUDE_PROJECT_DIR alone is wrong whenever the harness runs hooks
+# from another directory.
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 DIR=$(resolve_repo_dir "$COMMAND" "$CWD")
 
@@ -74,9 +74,10 @@ if ! git -C "$DIR" remote get-url origin >/dev/null 2>&1; then
   emit "[pr-state] branch=$BRANCH unavailable=no-remote"
 fi
 
-# Probe origin and gh. Both errors degrade silently to unavailable.
+# Probe origin and gh. Both errors degrade silently to unavailable. gh has no
+# -C and reads the branch from its cwd, so it runs from the resolved repo too.
 git -C "$DIR" fetch --prune origin >/dev/null 2>&1
-PR_JSON=$(gh pr view --json state,mergedAt,headRefName,url 2>/dev/null)
+PR_JSON=$(cd "$DIR" && gh pr view --json state,mergedAt,headRefName,url 2>/dev/null)
 
 if [ -z "$PR_JSON" ]; then
   emit "[pr-state] branch=$BRANCH state=NONE (no PR for this branch, or gh unavailable)"

@@ -13,8 +13,8 @@ Run these checks in order. Stop at the first failure.
 
 **why-no-hook:** skill workflow guidance; each step requires understanding the surrounding context (repo, task shape, prior state).
 
-- [ ] Run `/verify-done` - stop on first failure (typecheck + lint + tests + build) `(review-time: see section note)`
-- [ ] No debugging artifacts (`console.log`, `debugger`, `.only()`, `TODO` without issue link) `(review-time: see section note)`
+- [ ] Full gate passed at HEAD. With a declared `verify`, a `<git-dir>/verify-passed` stamp equal to HEAD on a clean tree counts. Otherwise run `/verify-done` and stop on first failure `(review-time: see section note)`
+- [ ] No debugging artifacts (`console.log`, `debugger`, `.only()`, `TODO` or `FIXME` markers) `(review-time: see section note)`
 
 ### 2. Git Hygiene
 
@@ -25,7 +25,7 @@ Run these checks in order. Stop at the first failure.
 - [ ] No merge conflict markers in code `(review-time: see section note)`
 - [ ] No sensitive files staged (`.env`, credentials, keys) `(review-time: see section note)`
 
-### 3. Security Review (see `references/security-checklist.md`; invoke `cybersecurity-expert` agent for risky changes)
+### 3. Security Review (see `~/.agents/references/security-checklist.md`; spawn the `Cybersecurity Expert` teammate for risky changes)
 
 - [ ] No secrets in code or commit history `(review-time: see section note)`
 - [ ] Dependencies clean: `npm audit` with zero critical/high `(review-time: see section note)`
@@ -57,7 +57,7 @@ Run these checks in order. Stop at the first failure.
 
 If all checks pass:
 
-1. Create the PR with `/mr`, which fills the repo template, links the issues, and holds for your approval `(review-time: see section note)`
+1. Create the PR with `/mr`, which fills the repo template, links the issues, and creates it without a confirmation step `(review-time: see section note)`
 2. Request reviewers if specified `(review-time: see section note)`
 3. Report: "READY TO SHIP - all pre-launch checks passed" `(review-time: see section note)`
 

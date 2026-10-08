@@ -36,9 +36,9 @@ description: "Monitor the CI pipeline for the current branch via a background Mo
      d. **Classify the failure as transient or real before proposing any change** - transient = infra outage, rate limit, queued/timed-out runner, auth/network flake, registry or dependency propagation delay; real = a test/lint/type/build/coverage failure caused by the code under change. State the classification `(review-time: see section note)`
      e. **If transient**: re-run the failed job (`gh run rerun <run-id> --failed` / `glab ci retry <job-id>`) and keep monitoring - do NOT edit code for a transient failure. Escalate to the user only if it recurs after a re-run `(review-time: see section note)`
      f. Run `~/.agents/scripts/notify.sh "CI failed - <failure-summary>"`
-     g. **If real, propose the fix to the user** - explain what failed and what you'd change. Do NOT push automatically `(review-time: see section note)`
-     h. Wait for user approval before implementing the fix `(review-time: see section note)`
-     i. After approval: fix, commit with a descriptive message, push `(review-time: see section note)`
+     g. **If real, fix it**: make the change, run `npm run verify:fast` when package.json declares it, otherwise `/verify-done`. Commit, push, and keep monitoring. The push hook runs the fast gate again `(review-time: see section note)`
+     h. **Before `gh pr ready`**: with a declared `verify`, the hook needs `<git-dir>/verify-passed` equal to HEAD. Run `npm run verify` once if it is not `(review-time: see section note)`
+     i. Report what failed and what changed in the same message as the next action `(review-time: see section note)`
 
 ## How it works
 
@@ -67,4 +67,4 @@ Safe commands to use:
 - After 3 consecutive failures on the **same issue**, stop and escalate - something structural is wrong `(review-time: see section note)`
 - Never weaken tests, skip linting, or lower coverage thresholds to make CI pass `(review-time: see section note)`
 - Never use `--no-verify` or skip hooks `(review-time: see section note)`
-- If a failure looks unrelated to your changes (flaky test, infra issue), flag it to the user rather than trying to fix it `(review-time: see section note)`
+- A failure unrelated to your changes (flaky test, infra issue) is transient: re-run it per step e, and do not edit code for it `(review-time: see section note)`

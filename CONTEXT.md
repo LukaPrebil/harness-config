@@ -7,7 +7,7 @@ The domain language for this repo's multi-host configuration, agent-orchestratio
 ### Multi-host configuration
 
 **Agent host**:
-A coding-agent runtime that consumes this repo's shared instructions and skills, currently Claude Code, Codex, and Pi. Called a **harness** in repo naming and prose; the two words are synonyms.
+A coding-agent runtime that consumes this repo's shared instructions and skills, currently Claude Code, Codex, and Pi. Also called a **harness**, as in the `HARNESS_SKIP_HOSTS` variable; the two words are synonyms.
 _Avoid_: "agent" when referring to the runtime - reserve agent for a model-driven worker or session.
 
 **Shared instruction source**:
@@ -35,15 +35,19 @@ Host-specific configuration that connects an agent host to the shared instructio
 _Avoid_: "copy", "fork" - adapters must not duplicate shared guidance.
 
 **Host bootstrap**:
-The multi-host installer that checks or creates the filesystem links connecting supported agent hosts to this repo.
+`scripts/setup-hosts.sh`, the multi-host installer that checks or creates the filesystem links connecting supported agent hosts to this repo.
 _Avoid_: "Codex setup script", "Claude setup script" for the shared installer.
+
+**Hook dispatcher**:
+`hooks/lib/dispatch.sh`, which runs the hooks registered in `settings.json` for a host without Claude Code's native hooks.
+_Avoid_: "hook runner", "hook proxy".
 
 **Behavioral parity**:
 Equivalent host-neutral guidance and skills across supported agent hosts, even when invocation syntax differs.
 _Avoid_: "full parity" - hooks, permissions, and subagent mechanics are outside this boundary.
 
 **Mechanical parity**:
-Equivalent enforcement through host-specific hooks, permissions, notifications, and subagent configuration.
+Equivalent enforcement across hosts: one hook registry run by each host, plus host-specific permissions, notifications, and subagent configuration.
 _Avoid_: "behavioral rules" - this parity is enforced by the host rather than model attention.
 
 **Deny list**:
@@ -51,24 +55,32 @@ The machine-readable deny rules in the root `settings.json`, canonical enforceme
 _Avoid_: "Claude permissions" (hosts other than Claude consume it), "blocklist".
 
 **Permission gate**:
-pi's mechanical enforcement of the Deny list by intercepting model tool calls before execution.
+Pi's mechanical enforcement of the Deny list. The pinned `pi-permission-system` package intercepts model tool calls before execution, using the Derived policy from the `permission-gate` extension.
 _Avoid_: "sandbox", "security boundary" - an in-process gate is friction, not isolation.
 
 **Derived policy**:
 A permission config a host mechanism consumes, generated from the Deny list rather than hand-edited; staleness is Drift.
 _Avoid_: "synced permissions", hand-edited copies of Deny-list rules.
 
-**Profile**:
-One of the two pi account scopes, work or personal; a Profile's config directory is selected by the account shim, and each Profile consumes its own startup settings file.
-_Avoid_: "account" for the scope itself - the account shim answers work or personal, the Profile is the resulting configuration scope.
-
 **Drift**:
 A host's links diverging from the checkout; the Host bootstrap detects it with `--check` and repairs it with `--apply`.
 _Avoid_: "config drift", "stale links", "out-of-sync".
 
 **Workflow state**:
-Cross-session research, plans, specs, and diaries shared by every agent host under the historical `.claude/state/` project path.
+Cross-session research, plans, specs, diaries, wayfinder maps, and per-branch run files (task list, test lock, evidence ledger, reply drafts) shared by every agent host under the historical `.claude/state/` project path.
 _Avoid_: "Claude state" - the path is retained for compatibility, but ownership is multi-host.
+
+**Profile**:
+One of the two Pi account scopes, work or personal; a Profile's config directory is selected by the account shim, and each Profile consumes its own startup settings file.
+_Avoid_: "account" for the scope itself - the account shim answers work or personal, the Profile is the resulting configuration scope.
+
+**MCP surface**:
+The MCP tools a Pi session can reach, owned either by the `pi-mcp-adapter` extension or by Pi's built-in MCP support.
+_Avoid_: "the adapter" (the repo already uses **Host adapter** for the shared-config translator), "MCP server" (one endpoint, not everything reachable through it).
+
+**Script tool**:
+The Pi tool that runs model-written JavaScript against other tools, one per surface: `codemode` for Pi's own tools, `mcpScript` for MCP tools under the adapter.
+_Avoid_: "the sandbox", "the code tool" - a script tool is named by the surface its script can reach.
 
 ### Agent orchestration
 
@@ -85,11 +97,11 @@ Named read-only teammates that coordinate peer-to-peer via SendMessage to challe
 _Avoid_: "round-table", "team mode".
 
 **Peer session**:
-Another pi session on this machine, addressable directly for coordination; exists outside the spawn relationship, unlike a Teammate.
+Another Pi session on this machine, addressable directly for coordination; exists outside the spawn relationship, unlike a Teammate.
 _Avoid_: "subagent", "teammate" for cross-session peers.
 
 **Advisory persona**:
-A persona whose frontmatter `tools` list excludes Edit/Write/NotebookEdit, so mutating a file takes a deliberate shell command rather than one tool call (PR Reviewer, Cybersecurity Expert, GDPR Expert, Product Manager, UX Expert). These personas keep Bash, which they need for `git diff` and `gh`, so the brief still carries the read-only instruction.
+A persona whose frontmatter `tools` list excludes Edit/Write/NotebookEdit, so mutating a file takes a deliberate shell command rather than one tool call (PR Reviewer, Spec Verifier, Cybersecurity Expert, GDPR Expert, Product Manager, UX Expert). These personas keep Bash, which they need for `git diff` and `gh`, so the brief still carries the read-only instruction.
 _Avoid_: "read-only agent", "reviewer agent", "mechanically read-only" - Bash makes the guarantee partial.
 
 **Writer persona**:
@@ -103,7 +115,7 @@ A skill the model may auto-invoke because its `description` carries trigger phra
 _Avoid_: "auto skill".
 
 **User-invoked skill**:
-A skill only a human can start (`disable-model-invocation: true`, human-facing description); reserved for orchestration a human should sequence deliberately.
+A skill only a human can start (`disable-model-invocation: true`, human-facing description); reserved for runs a human should start deliberately.
 _Avoid_: "manual skill", "slash-only skill".
 
 **Orchestrator**:
@@ -118,6 +130,30 @@ _Avoid_: "helper skill".
 The agreed point where a test exercises behaviour; chosen highest and fewest, fixed during spec and reused by test and build.
 _Avoid_: "mock point".
 
+**Acceptance criterion**:
+A spec line with an ID and a check (`test`, `cmd`, or `manual`) that proves it.
+_Avoid_: "requirement" for a line with no check.
+
+**Evidence ledger**:
+The per-branch table of each criterion's status, check output, and the commit it ran at; written by the Spec Verifier, read by the evidence gate.
+_Avoid_: "test report".
+
+**Slice loop**:
+The per-slice cycle in `build`: the QA Expert writes and locks failing tests, an implementer makes them pass, a read-only panel reviews, and fixes are re-reviewed up to three rounds.
+_Avoid_: "TDD loop" for the multi-role cycle.
+
+**Blocked on me**:
+The heading that ends a run and a PR body, listing what only the user can do: manual criteria, escalations, and drafted replies to humans.
+_Avoid_: "action items", "TODO".
+
+**Test lock**:
+The per-branch list of test files the QA Expert committed for a slice; only the QA Expert may edit them.
+_Avoid_: "frozen tests".
+
+**Spec Verifier**:
+The advisory persona that runs each criterion's check at HEAD and writes the evidence ledger; it never fixes what it finds.
+_Avoid_: "QA agent".
+
 **Decision ticket**:
 A wayfinder map entry that resolves to a decision, not a deliverable.
 _Avoid_: "task", "story".
@@ -129,7 +165,7 @@ _Avoid_: "spike task", "POC".
 ### Config surface
 
 **Always-loaded rule**:
-A rule in `AGENTS.md` or in a `rules/` file without `paths:` frontmatter, present in the context of every session regardless of the task.
+A rule in `AGENTS.md` or in a `rules/` file without `paths:` frontmatter, present in the context of every Claude Code session regardless of the task. Codex and Pi load only `AGENTS.md` this way and reach `rules/` through the Rulebook.
 _Avoid_: "global rule", "base rule".
 
 **On-demand rule**:
@@ -137,26 +173,12 @@ A rule that enters context only when its trigger fires: `paths:` frontmatter mat
 _Avoid_: "lazy rule", "scoped rule".
 
 **Prose gate**:
-The mechanical tier of the writing policy: the word lists, filler phrases and punctuation checks in `hooks/prose-gate.sh`, applied to markdown writes, commit messages and PR bodies. Distinct from the code-structure checks in `hooks/post-edit-lint.sh`, which fire on comment shape and language rules rather than word choice.
+The mechanical tier of the writing policy: the word lists, filler phrases and punctuation checks in `hooks/prose-gate.sh`, applied to markdown writes, commit messages and PR bodies, and in CI to every tracked markdown file. Distinct from the code-structure checks in `hooks/post-edit-lint.sh`, which fire on comment shape and language rules rather than word choice.
 _Avoid_: "the lint hook", "the style check".
 
 **Judgment tier**:
 The half of the writing policy no regex can check: forced triads, synonym cycling, sentences naming a feeling instead of a mechanism. Lives in the `write-plain` skill, so it triggers on prose work rather than loading every session.
 _Avoid_: "soft rules", "style guide".
-
-### Pi harness
-
-**MCP surface**:
-The MCP tools a pi session can reach, owned either by the `pi-mcp-adapter` extension or by pi's built-in MCP support.
-_Avoid_: "the adapter" (harness-config already uses **Host adapter** for the shared-config translator), "MCP server" (one endpoint, not everything reachable through it).
-
-**Script tool**:
-The pi tool that runs model-written JavaScript against other tools, one per surface: `codemode` for pi's own tools, `mcpScript` for MCP tools under the adapter.
-_Avoid_: "the sandbox", "the code tool" - a script tool is named by the surface its script can reach.
-
-**Jev call site**:
-A place where a Jev classifier verdict changes what the harness does, so each one carries a pre-registered accuracy gate.
-_Avoid_: "Jev use" - ranking tools for a search changes no behavior, so it is not a call site.
 
 ## Relationships
 
@@ -164,30 +186,27 @@ _Avoid_: "Jev use" - ranking tools for a search changes no behavior, so it is no
 - Each **Agent host** discovers the same **Shared skill library** through its native user-level path.
 - Every **Agent host** also gets the **Shared root**, so one absolute path in a shared file resolves everywhere.
 - Each **Agent host** maps **Compatibility notation** to its native skill and teammate mechanisms.
-- The **Host bootstrap** installs every **Host adapter** while the legacy Claude setup command remains a compatibility entrypoint.
+- The **Host bootstrap** installs every **Host adapter** while the legacy Claude setup command, `scripts/setup-symlinks.sh`, remains a compatibility entrypoint.
 - The **Host bootstrap** leaves provider, model, and credential choices to each **Agent host** user.
 - A **Host adapter** may add host-specific behavior but must not redefine shared guidance.
 - **Behavioral parity** is the first multi-host milestone; **Mechanical parity** is translated and verified separately for each host.
 - A **Permission gate** enforces the **Deny list** on one Agent host; rules without a translation for that host are surfaced, not silently dropped.
 - All hosts translate one canonical **Deny list**; a host may enforce a superset, never a subset.
 - A host's permission mechanism derives its rules from the **Deny list**; a generated or synced copy is acceptable, a second hand-maintained policy file is not.
-- **Drift** between the checkout and a host is surfaced at that host's session start.
+- **Drift** between the checkout and a host is surfaced at session start on Claude Code and Pi. Codex has no drift check of its own, because the shared `SessionStart` hook audits only the Claude Code dir, so a Codex user runs `bash scripts/setup-hosts.sh --check --host codex` by hand.
 - **Behavioral parity** covers interactive and non-interactive modes supported by each **Agent host**.
 - Every **Agent host** reads and writes the same **Workflow state** so work can move between hosts without conversion.
 - Detailed standards live in **Reusable disciplines** and load on demand rather than expanding the **Shared instruction source**.
 - The **Rulebook** exposes detailed `rules/` standards as one **Reusable discipline** without changing their source location.
 - A **Teammate** runs in either **Lane mode** or **Panel mode**.
 - A **Peer session** is another session on this machine reachable through the intercom broker; only Teammates are spawned, and only Peer sessions exist before and after one conversation.
-- Our repo keeps **Orchestrators** at the **Model-invoked** layer (grill and build auto-fire as workflow phases); only `wayfinder` is a **User-invoked** orchestrator.
-- A **Reusable discipline** is always **Model-invoked**; an **Orchestrator** may invoke disciplines.
+- Our repo keeps **Orchestrators** at the **Model-invoked** layer (grill and build auto-fire as workflow phases); only `wayfinder` and `deliver` are **User-invoked** orchestrators.
+- A **Reusable discipline** is **Model-invoked**, except `wait-what`, which is **User-invoked**; an **Orchestrator** may invoke disciplines.
 - `wayfinder` resolves **Decision tickets** one per session until the fog clears, then hands to the spec stage.
 - **Lane mode** is for mutating work (build/implementation); **Panel mode** is for read-only work (research, grilling, design).
 - An **Advisory persona** can join **Panel mode** only; a **Lane mode** teammate must be a **Writer persona**.
 - An **Always-loaded rule** competes for attention in every session; an **On-demand rule** does not. A rule with a mechanical trigger (file path or unambiguous phrase) belongs on demand.
 - The **Prose gate** and the **Judgment tier** split one policy by what a regex can see. A pattern that fires on correct usage belongs in the **Judgment tier**, not the gate.
-- A session has exactly one **MCP surface** owner: the built-in MCP extension is disabled by config, not left to whichever extension happens to register `/mcp` first.
-- A **Script tool** reaches its own surface directly and the other only through a gateway: `codemode` calls MCP tools with `mcp` or `mcpScript`, and reaches an individual MCP tool by name only when the **MCP surface** owner declares it script-callable.
-- A **Jev call site** ships only after its pre-registered gate is met; a new evidence form or a new model reopens the gate rather than inheriting the old verdict.
 - The distinguishing axis is coordination topology: **Lane mode** is a star (teammates report only to the parent), **Panel mode** is a mesh (teammates also message each other). Worktree isolation follows from this: lanes mutate files so they need worktrees, panels are read-only so they do not.
 
 ## Example dialogue
@@ -197,11 +216,10 @@ _Avoid_: "Jev use" - ranking tools for a search changes no behavior, so it is no
 
 ## Flagged ambiguities
 
-- "harness" and "host" named the same runtime - resolved: synonyms; prose and the repo name say **harness**, while inherited script names, flags, and upstream-shared files keep "host" so merges stay conflict-free.
+- "harness" and "host" named the same runtime - resolved: synonyms; docs prose says **host**, while names inherited from the upstream harness-config repo, such as `HARNESS_SKIP_HOSTS`, keep their spelling so merges stay conflict-free.
 - "Agent" was used for both the coding runtime and a model-driven worker - resolved: the runtime is an **Agent host**; a named worker is a **Teammate**.
 - Pi was described as a design target - resolved: Pi is a supported **Agent host** within the **Behavioral parity** boundary.
 - "Full Pi support" was ambiguous - resolved: Pi loads shared behavior in every native mode; **Teammate** spawning (including background runs and panel-style steering) carries mechanical parity through the `pi-subagents` package.
 - "subagent" was used for both the generic spawn mechanism and a named agent - resolved: a named agent is a **Teammate**; "subagent" refers only to the generic Agent-tool spawn.
 - "skill" was used for both sequencing workflows and single practices - resolved: a sequencing skill is an **Orchestrator**, a single-practice skill is a **Reusable discipline**.
-- "full permission parity for pi" was ambiguous - resolved: the pi **Permission gate** enforces a **superset** of the **Deny list** on file tools (Edit rules also bind writes; bash matching covers command segments), so any parity claim names its direction.
-- "adapter" now names two unrelated things - resolved: the shared-config translator is the **Host adapter**, and the pi MCP owner is named as the **MCP surface** owner or as `pi-mcp-adapter`.
+- "full permission parity for pi" was ambiguous - resolved: the Pi **Permission gate** enforces a **superset** of the **Deny list** on file tools (Edit rules also bind writes; bash matching covers command segments), so any parity claim names its direction.

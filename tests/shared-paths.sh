@@ -33,6 +33,17 @@ EOF
   return 1
 }
 
+# Tracked content only. An ignored tree such as skills/synced/ is not content
+# this repo ships, and scanning it fails the check for a file only one checkout
+# has. Mirrors list_corpus() in hooks/prose-gate.test.sh.
+tracked_grep() {
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git grep "$@" -- skills rules agents
+  else
+    grep -r "$@" skills/ rules/ agents/ 2>/dev/null
+  fi
+}
+
 echo "== shared manifest =="
 MANIFEST_COUNT=$(manifest | wc -l | tr -d ' ')
 if [ "$MANIFEST_COUNT" -gt 0 ]; then
@@ -47,7 +58,7 @@ fi
 echo
 echo "== ~/.agents references resolve =="
 # shellcheck disable=SC2088  # the tilde is literal text being searched for
-REFS=$(grep -rhoE '~/\.agents/[A-Za-z0-9._/-]+' skills/ rules/ agents/ 2>/dev/null \
+REFS=$(tracked_grep -hoE '~/\.agents/[A-Za-z0-9._/-]+' \
   | sed 's/[.,]$//' | sort -u)
 
 if [ -z "$REFS" ]; then
@@ -86,7 +97,7 @@ echo "== no host-specific paths outside Claude-only mechanisms =="
 # Hooks and settings.json really are Claude-only, so those rows may name
 # ~/.claude. Anything else in shared content should use the shared root.
 # shellcheck disable=SC2088  # the tilde is literal text being searched for
-STRAY=$(grep -rnE '~/\.claude/' skills/ rules/ agents/ 2>/dev/null \
+STRAY=$(tracked_grep -nE '~/\.claude/' \
   | grep -vE '~/\.claude/(hooks|settings\.json|rules)' || true)
 if [ -z "$STRAY" ]; then
   pass "shared content names no stray ~/.claude paths"

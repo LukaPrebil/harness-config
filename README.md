@@ -111,6 +111,7 @@ Releases never publish to npm. The bot release commit on `main` is the one non-h
 - **`skills/`** - shared workflows such as `grill-with-docs`, `build`, `debug`, `research`, and `verify-done`.
 - **`hooks/`** - Claude Code automation wired into `settings.json`; host-specific parity is deferred.
 - **`scripts/`** - the multi-host bootstrap, its Claude compatibility wrapper, and utilities used by hooks and skills.
+- **`shims/`** - the account shims the bootstrap links into `~/bin`, so each host reads the config dir for the working directory.
 - **`docs/adr/`** - Architecture Decision Records.
 - **`references/`** - long-form checklists (security, testing) loaded by skills on demand.
 - **`templates/`** - boilerplate for new ADRs and docs.

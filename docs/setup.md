@@ -54,6 +54,10 @@ How to install this config, scope it per machine, and wire each host. For the bi
 
 Claude Code gets `CLAUDE.md` because it reads `AGENTS.md` only at project level.
 
+### Account shims
+
+`~/bin` holds one shim per host: `pi`, `claude`, and the `agent-account` router both of them call. The bootstrap links them from `shims/`. Each shim reads the working directory, sets that host's config dir, and execs the real binary, so `~/bin` has to stay ahead of Homebrew's `bin` directories on PATH. Everything else that reaches these binaries by absolute path is unaffected.
+
 ## Keep runtime state out of commits
 
 Claude Code and Pi write runtime keys into `settings.json`. The two `git config` lines in the [quick start](../README.md#quick-start) install a clean filter that strips them. `.gitattributes` applies the filter to `settings.json` and `pi/settings.json`.

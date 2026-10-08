@@ -5,6 +5,8 @@ A skill is a `skills/<name>/SKILL.md` file whose `description` says when to use 
 ## How skills load
 
 - Every host reads `skills/` through `~/.agents/skills`. Claude Code also reads it through `~/.claude/skills`, and `package.json` declares it for Pi.
+- Claude Code syncs each Claude account's skill library into `skills/synced/`, and the `~/.claude/skills` link puts those directories inside this checkout. `.gitignore` keeps them out of the repo.
+- A Pi Profile excludes the buckets another account synced, so one session loads one account's library. Claude Code has no skill filter and loads every bucket.
 - A **model-invoked** skill carries trigger phrases in its description, so the model enters it without being asked. 35 skills work this way.
 - A **user-invoked** skill sets `disable-model-invocation: true`, so only a typed `/name` starts it. `deliver`, `wayfinder`, and `wait-what` work this way, because a long run should start only when you ask for it.
 - Shared skills use Claude Code notation: `/name`, `$ARGUMENTS`, `Agent`, and `SendMessage`. `AGENTS.md` maps each one to the equivalent on Codex and Pi.

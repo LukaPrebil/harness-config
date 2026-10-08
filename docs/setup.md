@@ -118,6 +118,14 @@ Fix the file by hand, then run `--apply` again.
 
 It also writes `~/.codex/hooks.json`. The file sends `PreToolUse`, `PostToolUse`, `SessionStart`, and `SessionEnd` events to `hooks/lib/dispatch.sh`. Codex gets no `Notification` hook. An existing hooks file of your own needs `--adopt`. Review and trust the hooks file in Codex after each regeneration.
 
+This repo owns that file. Herdr's Codex integration writes to it as well, so keep that integration uninstalled:
+
+```bash
+herdr integration uninstall codex
+```
+
+Herdr's settings tab installs integrations for the agents it finds on `PATH`, so a visit there can add the entry back. `--check --host codex` then reports drift: uninstall it again and re-run `--apply --adopt`.
+
 `hooks/deny-gate.sh` brings the deny list to Codex. It blocks Bash commands matching a `Bash` rule, edits and shell commands naming a denied path, and denied MCP tools. It adds friction, not a sandbox.
 
 Codex runs `symlink-check.sh` at session start, but that hook checks only the Claude Code dir, and the dispatcher drops its warning. Run `bash scripts/setup-hosts.sh --check --host codex` by hand to see Codex drift.
@@ -131,7 +139,7 @@ curl -fsSL https://pi.dev/install.sh | sh
 bash scripts/setup-hosts.sh --apply --host pi
 ```
 
-The Pi resources live in `pi/`. Shared skills come from `~/.agents/skills`, and `package.json` also declares this repo as a Pi package. The linked resources apply in interactive, print, JSON, and RPC modes, except the status line and herdr extensions, which run only in the TUI. See [Pi's usage documentation](https://pi.dev/docs/latest/usage).
+The Pi resources live in `pi/`. Shared skills come from `~/.agents/skills`, and `package.json` also declares this repo as a Pi package. A Profile's settings exclude the skill-sync buckets another Claude account wrote, so one session loads one account's library; [Skills](skills.md#how-skills-load) has the details. The linked resources apply in interactive, print, JSON, and RPC modes, except the status line and herdr extensions, which run only in the TUI. See [Pi's usage documentation](https://pi.dev/docs/latest/usage).
 
 The bootstrap does not install or upgrade Pi; updates arrive through `pi update` on the managed install. It does not manage credentials, project trust, tools, or isolation. The linked `pi/settings.json` and `pi/models.json` do set the default provider, default model, and package list. Pi has no built-in sandbox, so unattended work needs an external boundary. See [Pi's security guidance](https://pi.dev/docs/latest/security). Auto-compaction stays off: a long session gets handed off or stopped, not silently summarized.
 

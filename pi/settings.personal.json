@@ -34,5 +34,9 @@
   ],
   "extensions": [
     "-builtin:mcp"
+  ],
+  "skills": [
+    "!skills/synced/44fc44fd-*/**",
+    "!skills/synced/a141ca0a-*/**"
   ]
 }

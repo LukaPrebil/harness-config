@@ -25,4 +25,4 @@ The managed root sits outside both agent dirs. `~/.pi-personal/agent/bin` links 
 
 `pi update` stages the next release, verifies it, and activates it by rewriting `current-version`. The release it replaced stays in `releases/` until the update after that.
 
-Nothing else installs or upgrades Pi. The bootstrap in `scripts/setup-hosts.sh` links configuration into the two agent dirs and stops there. See the Pi section of the [README](../README.md) for the link map and the per-Profile settings.
+Nothing else installs or upgrades Pi. The bootstrap links configuration into the two agent dirs and stops there. See [Setup](setup.md) for those links and the per-Profile settings.

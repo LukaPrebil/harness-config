@@ -18,6 +18,10 @@ _Avoid_: "Codex instructions", "Claude rules" when the guidance applies across h
 The repo's `skills/` tree, exposed to Claude Code through `~/.claude/skills` and to every host through the Shared root.
 _Avoid_: "Claude skills", "Codex skills" when the skill follows the shared Agent Skills format.
 
+**Skill sync bucket**:
+One machine-local `skills/synced/<account-or-org>_<user>/` directory that Claude Code writes when it syncs a single account's skill library into the **Shared skill library**. Each bucket holds real loadable skills; the sync tool owns its contents, and `.gitignore` keeps it out of the checkout.
+_Avoid_: "synced folder", "skill cache", "plugin cache" - a bucket is not disposable.
+
 **Shared root**:
 The repo-owned `~/.agents/` directory, linked on every host, holding the trees a shared skill may name by absolute path: `skills`, `rules`, `scripts`, `templates`, `references`, `agents`, and the pull request template. A shared file names `~/.agents/...`, never a host's own config dir.
 _Avoid_: `~/.claude/...` inside `skills/`, `rules/`, or `agents/` for anything but a genuinely Claude-only mechanism such as hooks.
@@ -206,6 +210,7 @@ _Avoid_: "soft rules", "style guide".
 - All hosts translate one canonical **Deny list**; a host may enforce a superset, never a subset.
 - A host's permission mechanism derives its rules from the **Deny list**; a generated or synced copy is acceptable, a second hand-maintained policy file is not.
 - **Drift** between the checkout and a host is surfaced at session start on Claude Code and Pi. Codex has no drift check of its own, because the shared `SessionStart` hook audits only the Claude Code dir, so a Codex user runs `bash scripts/setup-hosts.sh --check --host codex` by hand.
+- A **Profile** loads only the **Skill sync buckets** of its own account; its startup settings exclude the buckets another account synced, because every account writes into the one shared `skills/synced/` tree.
 - **Behavioral parity** covers interactive and non-interactive modes supported by each **Agent host**.
 - Every **Agent host** reads and writes the same **Workflow state** so work can move between hosts without conversion.
 - Detailed standards live in **Reusable disciplines** and load on demand rather than expanding the **Shared instruction source**.

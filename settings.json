@@ -388,6 +388,33 @@
             "type": "command",
             "command": "bash '/Users/luka/.claude/hooks/herdr-agent-state.sh' session",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "HOOK=\"$CLAUDE_PROJECT_DIR/hooks/herdr-pane-context.sh\"; [ -x \"$HOOK\" ] || HOOK=\"$HOME/.claude/hooks/herdr-pane-context.sh\"; [ -x \"$HOOK\" ] && \"$HOOK\" || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "CwdChanged": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK=\"$CLAUDE_PROJECT_DIR/hooks/herdr-pane-context.sh\"; [ -x \"$HOOK\" ] || HOOK=\"$HOME/.claude/hooks/herdr-pane-context.sh\"; [ -x \"$HOOK\" ] && \"$HOOK\" || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK=\"$CLAUDE_PROJECT_DIR/hooks/herdr-pane-context.sh\"; [ -x \"$HOOK\" ] || HOOK=\"$HOME/.claude/hooks/herdr-pane-context.sh\"; [ -x \"$HOOK\" ] && \"$HOOK\" || true",
+            "timeout": 5
           }
         ]
       }

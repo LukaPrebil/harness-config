@@ -56,7 +56,7 @@ with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
         with conn:
             request = json.loads(conn.recv(4096))
             with open(sys.argv[2], "a") as log:
-                log.write(f"{request['method']} {request['params']['sort'][1]['field']['token']}\n")
+                log.write(f"{request['method']}\n")
             conn.sendall(b'{"result":{}}\n')
 PY_SERVER
 SERVER_PID=$!
@@ -125,8 +125,8 @@ view_requests() {
   cat "$VIEW_LOG"
 }
 
-expect "sorts the agent panel by repo on a fresh session start" \
-  "$(view_requests startup)" "agent.view.set repo"
+expect "leaves the agent panel to herdr's own sort policy on a fresh session start" \
+  "$(view_requests startup)" ""
 
 expect "leaves the agent view alone after /clear" \
   "$(view_requests clear)" ""

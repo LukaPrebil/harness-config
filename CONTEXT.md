@@ -87,7 +87,7 @@ The MCP tools a Pi session can reach, owned either by the `pi-mcp-adapter` exten
 _Avoid_: "the adapter" (the repo already uses **Host adapter** for the shared-config translator), "MCP server" (one endpoint, not everything reachable through it).
 
 **Script tool**:
-The Pi tool that runs model-written JavaScript against other tools, one per surface: `codemode` for Pi's own tools, `mcpScript` for MCP tools under the adapter.
+The Pi tool that runs model-written JavaScript against other tools. Since `pi-mcp-adapter` 6.0.0 one tool covers both surfaces: `codemode` reaches Pi's own tools and every MCP tool by name (`mcp__server__tool`), because the adapter's separate `mcpScript` tool is gone.
 _Avoid_: "the sandbox", "the code tool" - a script tool is named by the surface its script can reach.
 
 **Managed install**:

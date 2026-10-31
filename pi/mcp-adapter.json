@@ -1,8 +1,4 @@
 {
-  "settings": {
-    "scriptMode": true,
-    "scriptSkill": "model"
-  },
   "mcpServers": {
     "notion": {
       "url": "https://mcp.notion.com/mcp",

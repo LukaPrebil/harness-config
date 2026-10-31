@@ -38,6 +38,6 @@ Fix them upstream, then take the fix in the next sync. Do not patch them here.
 
 These are not his bugs. They are the price of taking his documentation verbatim, recorded here so the next reader is not misled.
 
-- `docs/setup.md`, `docs/decisions.md` and `docs/agents.md` name `pi/settings.json`, `pi/mcp.json` and a single Pi agent dir. This fork runs two Profiles, `pi/settings.work.json` and `pi/settings.personal.json`, with `pi/mcp-adapter.json`. The bootstrap and `pi/settings-parity.test.ts` describe the real layout.
+- `docs/setup.md`, `docs/decisions.md` and `docs/personas.md` name `pi/settings.json`, `pi/mcp.json` and a single Pi agent dir. This fork runs two Profiles, `pi/settings.work.json` and `pi/settings.personal.json`, with `pi/mcp-adapter.json`. The bootstrap and `pi/settings-parity.test.ts` describe the real layout.
 - `docs/decisions.md` says the original ADRs stay in git history. In this fork they are live files under `docs/adr/`.
 - `.github/workflows/reviewer.yml` is omitted. The AWS-backed CI reviewer stays deferred until its authority, credentials, and cost are approved.

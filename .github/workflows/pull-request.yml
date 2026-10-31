@@ -96,6 +96,9 @@ jobs:
       - name: Test the status line
         run: bash tests/statusline.sh
 
+      - name: Test the herdr pane context hook
+        run: bash tests/herdr-pane-context.sh
+
       - name: Test the host-neutral hook dispatcher
         run: bash tests/dispatch.sh
 
@@ -122,6 +125,9 @@ jobs:
 
       - name: Test the PR reply gate
         run: bash tests/pr-reply-gate.sh
+
+      - name: Test the PR readiness check and watch hook
+        run: bash tests/pr-ready.sh
 
   # ==============================================
   # Gate

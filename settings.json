@@ -8,7 +8,17 @@
       "Read(**/.env.example)",
       "Read(**/.env.sample)",
       "Edit(**/.env.example)",
-      "Edit(**/.env.sample)"
+      "Edit(**/.env.sample)",
+      "Bash(gh run list *)",
+      "Bash(gh run view *)",
+      "Bash(spacectl stack list *)",
+      "Bash(spacectl stack show *)",
+      "Bash(spacectl stack logs *)",
+      "Bash(spacectl stack changes *)",
+      "Bash(spacectl stack outputs *)",
+      "Bash(spacectl stack run list *)",
+      "Bash(spacectl stack resources list *)",
+      "Bash(spacectl stack dependencies *)"
     ],
     "deny": [
       "Read(**/.env)",
@@ -317,6 +327,23 @@
             "timeout": 15
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK=\"$CLAUDE_PROJECT_DIR/hooks/post-pr-open-watch.sh\"; [ -x \"$HOOK\" ] || HOOK=\"$HOME/.claude/hooks/post-pr-open-watch.sh\"; [ -x \"$HOOK\" ] && exec \"$HOOK\"",
+            "if": "Bash(gh pr create *)",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "HOOK=\"$CLAUDE_PROJECT_DIR/hooks/post-pr-open-watch.sh\"; [ -x \"$HOOK\" ] || HOOK=\"$HOME/.claude/hooks/post-pr-open-watch.sh\"; [ -x \"$HOOK\" ] && exec \"$HOOK\"",
+            "if": "Bash(gh pr ready *)",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SessionEnd": [
@@ -369,6 +396,33 @@
             "type": "command",
             "command": "bash '/Users/luka/.claude/hooks/herdr-agent-state.sh' session",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "HOOK=\"$CLAUDE_PROJECT_DIR/hooks/herdr-pane-context.sh\"; [ -x \"$HOOK\" ] || HOOK=\"$HOME/.claude/hooks/herdr-pane-context.sh\"; [ -x \"$HOOK\" ] && \"$HOOK\" || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "CwdChanged": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK=\"$CLAUDE_PROJECT_DIR/hooks/herdr-pane-context.sh\"; [ -x \"$HOOK\" ] || HOOK=\"$HOME/.claude/hooks/herdr-pane-context.sh\"; [ -x \"$HOOK\" ] && \"$HOOK\" || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOOK=\"$CLAUDE_PROJECT_DIR/hooks/herdr-pane-context.sh\"; [ -x \"$HOOK\" ] || HOOK=\"$HOME/.claude/hooks/herdr-pane-context.sh\"; [ -x \"$HOOK\" ] && \"$HOOK\" || true",
+            "timeout": 5
           }
         ]
       }
@@ -382,6 +436,7 @@
     "frontend-design@claude-plugins-official": true
   },
   "effortLevel": "xhigh",
+  "subagentPromptCacheTtl": "1h",
   "askUserQuestionTimeout": "never",
   "autoUpdatesChannel": "stable",
   "minimumVersion": "2.1.92",

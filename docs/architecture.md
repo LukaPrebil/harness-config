@@ -23,7 +23,7 @@ The repo answers with three design choices:
 | `AGENTS.md` | Shared instructions: priorities, writing, workflow, safety, git | Loaded at session start on every host |
 | `rules/` | 15 detailed standards, such as git, tests, and comments | See [rules](rules.md) |
 | `skills/` | 38 workflows, such as `/build`, `/mr`, and `/debug` | Picked by description, or typed as `/name`. See [skills](skills.md) |
-| `agents/` | 18 expert personas | Spawned as subagents. See [agents](agents.md) |
+| `agents/` | 18 expert personas | Spawned as subagents. See [personas](personas.md) |
 | `settings.json` | Hook registry, deny list, and Claude Code settings | Read by each host. See [hooks](hooks.md) |
 | `hooks/` | Guardrail scripts | Run on tool calls and session events |
 | `pi/` | Pi extensions, settings, models, and MCP servers | Linked into each Pi agent dir |
@@ -115,7 +115,7 @@ Skills and hooks share state through files under `.claude/state/` in the project
 | [Hooks](hooks.md) | See what each hook blocks and how hooks run on each host |
 | [Rules](rules.md) | See which rules load when and how enforcement tags work |
 | [Skills](skills.md) | See every skill, how skills load, and how `/deliver` runs |
-| [Agents](agents.md) | See the personas, lane mode, and panel mode |
+| [Personas](personas.md) | See the personas, lane mode, and panel mode |
 | [Contributing](contributing.md) | Change the config and run the checks CI runs |
 | [Decisions](decisions.md) | Learn why the config works this way |
 | [Cheatsheet](../CHEATSHEET.md) | Find the skill for a task |

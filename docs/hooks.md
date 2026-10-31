@@ -22,7 +22,11 @@ A registry entry has four parts:
 | `if` | An optional glob on the tool input | `Bash(git commit *)` |
 | `command` | The script and its arguments, with a timeout | `hooks/prose-gate.sh commit` |
 
-Each command runs the current project's `hooks/<name>` when that file is executable, and `~/.claude/hooks/<name>` otherwise. A session inside this repo therefore runs the checkout's own copy, so a hook edit takes effect in that session.
+Each command runs the current project's `hooks/<name>` when that file is executable, and `~/.claude/hooks/<name>` otherwise. A session inside this repo therefore runs the checkout's own copy, so a hook edit takes effect in that session. The `herdr-agent-state.sh` entry runs only `~/.claude/hooks/herdr-agent-state.sh` and never a project copy.
+
+"Current project" depends on the host. On Codex and Pi, `dispatch.sh` sets `CLAUDE_PROJECT_DIR` to the git top level of the working directory. On Claude Code, it is the directory the session started in, which is not always the git root. A session started in a subdirectory looks for `<subdir>/hooks/`.
+
+The lookup lets any project replace any hook. A repo that ships an executable `hooks/deny-gate.sh` runs its own copy instead of this one, so a hostile repo can ship a deny gate that allows everything. Before you open a session in an unfamiliar repo, check whether it has executable scripts in `hooks/` named like the ones below, and read them first. `ls -l <repo>/hooks` shows them. If one looks wrong, do not start a session in that repo. No setting forces the global copy.
 
 Exit codes decide the outcome:
 
@@ -35,7 +39,7 @@ Exit codes decide the outcome:
 
 | Host | Tool hooks | Session hooks | Deny list |
 | --- | --- | --- | --- |
-| Claude Code | Native, from `settings.json` | Native: `SessionStart`, `SessionEnd`, `Notification` | Native `permissions.deny`, plus `deny-gate.sh` |
+| Claude Code | Native, from `settings.json` | Native: `SessionStart`, `SessionEnd`, `CwdChanged`, `Stop`, `Notification` | Native `permissions.deny`, plus `deny-gate.sh` |
 | Codex | `~/.codex/hooks.json` calls `dispatch.sh` | `SessionStart` and `SessionEnd` through `dispatch.sh`; no `Notification` | `deny-gate.sh`, including the `Bash` rules |
 | Pi | The `hook-bridge` extension calls `dispatch.sh` for `bash`, `edit`, and `write` | Extensions instead: `drift-check` at start, `worktree-cleanup` at shutdown | The `permission-gate` extension derives a policy for the pinned `pi-permission-system` package; `deny-gate.sh` runs through the bridge |
 
@@ -69,14 +73,15 @@ Two gates defer to the repo they run in:
 
 ## PostToolUse hooks
 
-These run after a Write or Edit. A block here reports the problem after the file is saved.
+These run after a Write or Edit, except `post-pr-open-watch.sh`, which runs after a Bash call. A block here reports the problem after the file is saved.
 
 | Hook | Does | Blocks when | Bypass |
 | --- | --- | --- | --- |
-| `auto-format.sh` | Runs Prettier when the repo configures it and has no Biome config | Never | None |
+| `auto-format.sh` | Runs Prettier when the repo has no Biome config and either configures Prettier or has `node_modules/.bin/prettier` | Never | None |
 | `post-edit-typecheck.sh` | Runs `biome check --write` on the file when the repo has Biome | Biome reports an error | `SKIP_POST_EDIT_TYPECHECK` |
 | `post-edit-lint.sh` | Replaces em dashes, then checks the added lines | Tracker refs in comments, stacked `//` or `--` comments, `var`, TODO markers, `SELECT *`, `:latest` | `SKIP_POST_EDIT_LINT` |
 | `prose-gate.sh file` | Checks the added lines of a Markdown file | A blocked word, curly quotes, or an emoji heading | `SKIP_PROSE_GATE` |
+| `post-pr-open-watch.sh` | After a non-draft `gh pr create` or a `gh pr ready` succeeds, tells the agent to watch the PR with `scripts/pr-ready.sh --watch` and how to clear each blocker | Never | `SKIP_PR_WATCH` |
 
 The prose gate also prints advisories that never block: words to reconsider, sentences over 25 words, and a causal "since".
 
@@ -84,10 +89,11 @@ The prose gate also prints advisories that never block: words to reconsider, sen
 
 | Event | Hook | Does |
 | --- | --- | --- |
-| `SessionStart`, startup | `symlink-check.sh` | Warns when the Claude Code links drifted, with the fix command |
+| `SessionStart`, startup | `symlink-check.sh` | Warns when the Claude Code links drifted, with the fix command; `SKIP_SYMLINK_CHECK=1` turns it off |
 | `SessionStart`, after compaction | Inline `echo` | Reminds the model of the workflow, `/verify-done` before a PR, and the current year |
-| `SessionStart` | `herdr-agent-state.sh` | Reports the session to herdr when `HERDR_ENV=1` |
-| `SessionEnd` | `worktree-cleanup.sh` | Runs `scripts/worktree-prune.sh --apply`; `CLAUDE_DISABLE_WORKTREE_CLEANUP=1` turns it off |
+| `SessionStart` | `herdr-agent-state.sh` | Reports the session to herdr when `HERDR_ENV=1`. herdr manages this file and overwrites it on reinstall |
+| `SessionStart`, `CwdChanged`, `Stop` | `herdr-pane-context.sh` | Reports `$repo`, `$branch`, and `$wt` pane tokens to the herdr sidebar when `HERDR_ENV=1`. On `SessionStart` it also reports `$model`, because only that event carries the model. It also sets one of `$c0` to `$c13`, a color marker that the herdr config styles. Each new repo in a space takes the lowest unused color, saved in `~/.local/state/herdr/repo-colors`. `Stop` catches a branch switch inside a session. The agent panel keeps herdr's own `ui.agent_panel_sort` policy. Claude Code only |
+| `SessionEnd` | `worktree-cleanup.sh` | Runs `scripts/worktree-prune.sh --apply`; `CLAUDE_DISABLE_WORKTREE_CLEANUP=1` turns it off. Pi's `worktree-cleanup` extension also reads `HARNESS_DISABLE_WORKTREE_CLEANUP=1` |
 | `Notification` | Inline `osascript` | Shows a macOS notification on a permission or idle prompt |
 
 ## Bypass variables
@@ -122,10 +128,12 @@ A bypass is a deliberate human override, not a tool for the agent. A pull reques
 | `tests/hook-bridge.test.ts`, `tests/permission-gate.test.ts` | The Pi bridge, and the policy derived from the real deny list |
 | `tests/commit-gates.sh` | The conventional-commit gate and the prose gate on commits |
 | `tests/pr-gates.sh`, `tests/pre-pr-test-gate.sh`, `tests/pr-reply-gate.sh` | The PR body, prose, test, and reply gates |
+| `tests/pr-ready.sh` | `scripts/pr-ready.sh` and the PR watch hook |
 | `tests/evidence-gate.sh`, `tests/test-lock.sh` | The evidence gate and the test lock |
 | `tests/pre-push-gate.sh`, `tests/resolve-repo.sh` | The push gate, and how hooks find the target repo |
 | `tests/post-edit-hooks.sh` | The three per-edit hooks |
 | `tests/symlink-check.sh` | The drift check |
+| `tests/herdr-pane-context.sh` | The herdr pane tokens in a checkout, a worktree, a submodule, and a bare repo |
 | `hooks/prose-gate.test.sh` | Prose gate fixtures, plus every tracked Markdown file |
 
 `pre-commit-coauthor-gate.sh`, `herdr-agent-state.sh`, and `worktree-cleanup.sh` have no test. [Contributing](contributing.md#add-a-hook) shows how to add a hook with its test.

@@ -41,4 +41,5 @@ These are not his bugs. They are the price of taking his documentation verbatim,
 - `docs/setup.md`, `docs/decisions.md` and `docs/personas.md` name `pi/settings.json`, `pi/mcp.json` and a single Pi agent dir. This fork runs two Profiles, `pi/settings.work.json` and `pi/settings.personal.json`, with `pi/mcp-adapter.json`. The bootstrap and `pi/settings-parity.test.ts` describe the real layout.
 - `docs/decisions.md` says the original ADRs stay in git history. In this fork they are live files under `docs/adr/`.
 - `.github/workflows/reviewer.yml` is omitted. The AWS-backed CI reviewer stays deferred until its authority, credentials, and cost are approved.
+- `hooks/herdr-pane-context.sh` treats a colour lock as stale after three seconds rather than one, and waits again after breaking it. A one-second window broke a live lock on a CI runner and gave two repos the same colour.
 - `hooks/herdr-pane-context.sh` drops upstream's `agent.view.set` call on a fresh `SessionStart`. This fork keeps herdr's own `ui.agent_panel_sort = "priority"` instead of sorting the agent panel by repo, so a sync has to leave that call out.

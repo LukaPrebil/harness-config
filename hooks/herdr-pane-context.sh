@@ -58,17 +58,25 @@ repo_key=${repo// /_}
 color_file="${XDG_STATE_HOME:-$HOME/.local/state}/herdr/repo-colors"
 mkdir -p "$(dirname "$color_file")"
 touch "$color_file"
-# Panes run this hook in parallel, so the lookup and append hold a lock. After
-# one second the lock counts as stale: break it once and take it.
+# Panes run this hook in parallel, so the lookup and append hold a lock. The
+# critical section is a few milliseconds, so a lock still there after three
+# seconds belongs to a hook that died: break it once and take it. A one-second
+# window breaks a live lock on a loaded CI runner, and two repos then get the
+# same colour.
 lock="$color_file.lock"
 locked=0
-for _ in $(seq 20); do
+for _ in $(seq 60); do
   mkdir "$lock" 2>/dev/null && { locked=1; break; }
   sleep 0.05
 done
 if [ "$locked" = 0 ]; then
   rmdir "$lock" 2>/dev/null
-  mkdir "$lock" 2>/dev/null && locked=1
+  # Another pane may break the same lock at the same moment, so wait again
+  # instead of continuing without it.
+  for _ in $(seq 20); do
+    mkdir "$lock" 2>/dev/null && { locked=1; break; }
+    sleep 0.05
+  done
 fi
 [ "$locked" = 1 ] && trap 'rmdir "$lock" 2>/dev/null' EXIT
 color=$(awk -v s="${space:-_}" -v r="$repo_key" '$1 == s && $2 == r { print $3; exit }' "$color_file")

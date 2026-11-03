@@ -19,7 +19,8 @@
     "npm:@gotgenes/pi-permission-system@42.0.0",
     "npm:pi-mcp-adapter@7.0.0",
     "npm:pi-intercom@0.18.1",
-    "npm:pi-web-access"
+    "npm:pi-web-access",
+    "npm:pi-context-view@0.8.2"
   ],
   "defaultProvider": "ollama-cloud",
   "defaultModel": "deepseek-v4.1-flash:1017",

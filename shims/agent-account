@@ -1,7 +1,7 @@
 #!/bin/sh
-# Single source of truth for which account a directory belongs to. The pi shim
-# and the claude() wrapper in ~/.zsh_exports both call this, so adding a work
-# root is a one-line change in one file.
+# Single source of truth for which account a directory belongs to. The pi and
+# claude PATH shims both call this, so adding a work root is a one-line change
+# in one file.
 #
 # Expects an absolute path; defaults to the current directory.
 

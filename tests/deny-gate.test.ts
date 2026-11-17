@@ -179,6 +179,12 @@ describe('real deny list', () => {
       "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {}) { clientMutationId } }'",
       "glab api graphql -f query='mutation { mergeRequestAccept(input: {}) { errors } }'",
       'glab api -X POST projects/1/merge_trains/merge_requests/58',
+      'gh pr --repo=o/r merge 7',
+      'gh pr -Ro/r merge 7',
+      'glab mr --repo=g/x merge 58',
+      'glab mr -Rg/x merge 58',
+      'glab mr --repo=g/x accept 58',
+      "gh api graphql -f query='mutation { enqueuePullRequest(input: {}) { clientMutationId } }'",
     ];
     assert.deepEqual(unblocked(commands), []);
   });

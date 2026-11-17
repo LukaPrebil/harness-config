@@ -188,6 +188,8 @@ describe('real deny list', () => {
       'glab mr -R g/x accept',
       'gh pr -R o/r merge',
       'glab mr -R=g/x merge 5',
+      `Q='mutation { mergePullRequest(input: {}) { clientMutationId } }'; gh api graphql -f query="$Q"`,
+      `Q='mutation { enqueuePullRequest(input: {}) { clientMutationId } }' && gh api graphql -f query="$Q"`,
     ];
     assert.deepEqual(unblocked(commands), []);
   });
@@ -202,6 +204,10 @@ describe('real deny list', () => {
       'git merge --ff-only origin/main',
       'git log --merges',
       'glab api projects/1/merge_requests/58/approvals',
+      'gh pr -R o/r view 7 --json mergeable,mergeStateStatus',
+      'gh pr -R o/r view 7 --json mergedAt',
+      'gh pr --repo o/r list --state merged',
+      'gh pr -R o/r checkout merge-train-fix',
     ];
     assert.deepEqual(blocked(commands), []);
   });
@@ -217,6 +223,9 @@ describe('real deny list', () => {
       'psql -c "TRUNCATE x"',
       'psql -c "truncate table x"',
       'docker exec db psql -U u -c "truncate member_preferences cascade"',
+      'psql -c "TRUNCATE TABLE x"',
+      'mysql -e "TRUNCATE TABLE x"',
+      'mysql -e "truncate table x"',
     ];
     assert.deepEqual(unblocked(commands), []);
   });

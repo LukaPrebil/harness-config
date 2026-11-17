@@ -19,8 +19,9 @@ import {
   pathGlobToRegex,
   stripHeredocs,
 } from '../hooks/lib/deny-gate.ts';
-import type { DenyRule } from '../pi/extensions/permission-gate.ts';
+import { loadGateConfig, type DenyRule } from '../pi/extensions/permission-gate.ts';
 
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const HOME = '/home/u';
 const CWD = '/work/app';
 
@@ -145,5 +146,60 @@ describe('hook wrapper', () => {
   it('passes a malformed payload', () => {
     const result = spawnSync('bash', [wrapper], { input: 'not json', env: { ...process.env, DENY_RULES_SOURCE: source }, encoding: 'utf8' });
     assert.equal(result.status, 0);
+  });
+});
+
+describe('real deny list', () => {
+  const config = loadGateConfig(join(repoRoot, 'settings.json'));
+  const realRules = config.status === 'ok' ? config.rules : [];
+  const verdict = (command: string) => evaluate(bash(command), realRules, { home: HOME, bashRules: true });
+  const unblocked = (commands: string[]) => commands.filter((c) => verdict(c) === undefined);
+  const blocked = (commands: string[]) =>
+    commands.flatMap((c) => {
+      const hit = verdict(c);
+      return hit === undefined ? [] : [`${c} -> ${hit.rule}`];
+    });
+
+  it('loads the tracked settings.json', () => {
+    assert.equal(config.status, 'ok');
+  });
+
+  it('real deny list blocks merges', () => {
+    const commands = [
+      'glab mr merge 58 --yes',
+      'glab mr merge',
+      'glab mr accept 58',
+      'glab api -X PUT projects/1/merge_requests/58/merge',
+      'glab api --method PUT "projects/didomi%2Fx/merge_requests/58/merge"',
+      'gh api -X PUT repos/o/r/pulls/7/merge',
+    ];
+    assert.deepEqual(unblocked(commands), []);
+  });
+
+  it('real deny list allows read-only MR and PR commands', () => {
+    const commands = [
+      'glab mr view 58',
+      'glab mr list',
+      'glab api projects/1/merge_requests/58/notes',
+      'gh pr view 7 --json mergedAt',
+      'gh api repos/o/r/pulls/7/comments',
+    ];
+    assert.deepEqual(blocked(commands), []);
+  });
+
+  it('real deny list blocks destructive SQL in common cases', () => {
+    const commands = [
+      'psql -c "DROP TABLE x"',
+      'psql -c "drop table x"',
+      'psql -c "Drop Table x"',
+      'psql -c "DROP DATABASE x"',
+      'psql -c "drop database x"',
+      'psql -c "Drop Database x"',
+      'psql -c "TRUNCATE x"',
+      'psql -c "truncate table x"',
+      'docker exec db psql -U u -c "truncate member_preferences cascade"',
+    ];
+    assert.deepEqual(unblocked(commands), []);
+    assert.deepEqual(blocked(['truncate -s 0 file.log']), []);
   });
 });

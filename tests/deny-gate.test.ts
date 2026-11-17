@@ -185,6 +185,9 @@ describe('real deny list', () => {
       'glab mr -Rg/x merge 58',
       'glab mr --repo=g/x accept 58',
       "gh api graphql -f query='mutation { enqueuePullRequest(input: {}) { clientMutationId } }'",
+      'glab mr -R g/x accept',
+      'gh pr -R o/r merge',
+      'glab mr -R=g/x merge 5',
     ];
     assert.deepEqual(unblocked(commands), []);
   });
@@ -223,6 +226,7 @@ describe('real deny list', () => {
       'truncate -s 0 file.log',
       'grep -rn "TRUNCATE " migrations/',
       'git commit -m "docs: explain TRUNCATE usage"',
+      'grep -rn mergePullRequest src/',
     ];
     assert.deepEqual(blocked(commands), []);
   });

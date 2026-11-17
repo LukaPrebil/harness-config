@@ -104,13 +104,13 @@ A bypass is a deliberate human override, not a tool for the agent. A pull reques
 
 ## The deny list
 
-`permissions.deny` in `settings.json` holds 132 rules:
+`permissions.deny` in `settings.json` holds 142 rules:
 
 | Kind | Count | Examples |
 | --- | --- | --- |
 | `Read(...)` | 47 | `Read(**/.env)`, `Read(~/.ssh/**)`, `Read(**/*.pem)` |
 | `Edit(...)` | 44 | `Edit(**/.env.production)`, `Edit(~/.aws/**)` |
-| `Bash(...)` | 40 | `Bash(rm -rf *)`, `Bash(git push --force *)`, `Bash(git push * main)`, `Bash(gh pr merge *)`, `Bash(glab mr merge *)` |
+| `Bash(...)` | 50 | `Bash(rm -rf *)`, `Bash(git push --force *)`, `Bash(git push * main)`, `Bash(gh pr merge *)`, `Bash(glab mr merge *)` |
 | MCP | 1 | `mcp__claude_ai_Atlassian__*` |
 
 - Deny wins over allow on every host.

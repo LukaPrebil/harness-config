@@ -81,7 +81,7 @@ A rule the model must remember is weaker than a check the model cannot skip. Eve
 
 The tag tells a reader how much to trust a rule. A `(review-time)` tag must say why no hook can check it. [Rules](rules.md) covers the tag format and the budget on these tags.
 
-The deny list in `settings.json` sits beside the hooks. It blocks reads and edits of secrets and credential stores, and commands such as `rm -rf`, `sudo`, force-pushes, pushes to `main`, and `gh pr merge`. It matches literal patterns, so it adds friction rather than a sandbox. [Hooks](hooks.md) lists every hook and deny rule group.
+The deny list in `settings.json` sits beside the hooks. It blocks reads and edits of secrets and credential stores, and commands such as `rm -rf`, `sudo`, force-pushes, pushes to `main`, and PR or MR merges through `gh`, `glab`, or their APIs. It matches literal patterns, so it adds friction rather than a sandbox. [Hooks](hooks.md) lists every hook and deny rule group.
 
 ## Context budget
 

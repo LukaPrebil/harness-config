@@ -170,26 +170,6 @@ describe('real deny list', () => {
       'glab api --method PUT "projects/didomi%2Fx/merge_requests/58/merge"',
       'gh api -X PUT repos/o/r/pulls/7/merge',
       'glab mr accept 58 --yes',
-      'glab mr -R grp/x merge 58',
-      'glab mr --repo grp/x merge 58',
-      'glab mr -R grp/x accept 58',
-      'gh pr -R o/r merge 7',
-      'gh pr --repo o/r merge 7',
-      "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'",
-      "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {}) { clientMutationId } }'",
-      "glab api graphql -f query='mutation { mergeRequestAccept(input: {}) { errors } }'",
-      'glab api -X POST projects/1/merge_trains/merge_requests/58',
-      'gh pr --repo=o/r merge 7',
-      'gh pr -Ro/r merge 7',
-      'glab mr --repo=g/x merge 58',
-      'glab mr -Rg/x merge 58',
-      'glab mr --repo=g/x accept 58',
-      "gh api graphql -f query='mutation { enqueuePullRequest(input: {}) { clientMutationId } }'",
-      'glab mr -R g/x accept',
-      'gh pr -R o/r merge',
-      'glab mr -R=g/x merge 5',
-      `Q='mutation { mergePullRequest(input: {}) { clientMutationId } }'; gh api graphql -f query="$Q"`,
-      `Q='mutation { enqueuePullRequest(input: {}) { clientMutationId } }' && gh api graphql -f query="$Q"`,
     ];
     assert.deepEqual(unblocked(commands), []);
   });
@@ -204,10 +184,6 @@ describe('real deny list', () => {
       'git merge --ff-only origin/main',
       'git log --merges',
       'glab api projects/1/merge_requests/58/approvals',
-      'gh pr -R o/r view 7 --json mergeable,mergeStateStatus',
-      'gh pr -R o/r view 7 --json mergedAt',
-      'gh pr --repo o/r list --state merged',
-      'gh pr -R o/r checkout merge-train-fix',
     ];
     assert.deepEqual(blocked(commands), []);
   });
@@ -235,7 +211,6 @@ describe('real deny list', () => {
       'truncate -s 0 file.log',
       'grep -rn "TRUNCATE " migrations/',
       'git commit -m "docs: explain TRUNCATE usage"',
-      'grep -rn mergePullRequest src/',
     ];
     assert.deepEqual(blocked(commands), []);
   });

@@ -151,7 +151,8 @@ describe('hook wrapper', () => {
 
 describe('real deny list', () => {
   const config = loadGateConfig(join(repoRoot, 'settings.json'));
-  const realRules = config.status === 'ok' ? config.rules : [];
+  if (config.status !== 'ok') throw new Error(`real deny list did not load: ${config.reason}`);
+  const realRules = config.rules;
   const verdict = (command: string) => evaluate(bash(command), realRules, { home: HOME, bashRules: true });
   const unblocked = (commands: string[]) => commands.filter((c) => verdict(c) === undefined);
   const blocked = (commands: string[]) =>
@@ -159,10 +160,6 @@ describe('real deny list', () => {
       const hit = verdict(c);
       return hit === undefined ? [] : [`${c} -> ${hit.rule}`];
     });
-
-  it('loads the tracked settings.json', () => {
-    assert.equal(config.status, 'ok');
-  });
 
   it('real deny list blocks merges', () => {
     const commands = [
@@ -172,6 +169,16 @@ describe('real deny list', () => {
       'glab api -X PUT projects/1/merge_requests/58/merge',
       'glab api --method PUT "projects/didomi%2Fx/merge_requests/58/merge"',
       'gh api -X PUT repos/o/r/pulls/7/merge',
+      'glab mr accept 58 --yes',
+      'glab mr -R grp/x merge 58',
+      'glab mr --repo grp/x merge 58',
+      'glab mr -R grp/x accept 58',
+      'gh pr -R o/r merge 7',
+      'gh pr --repo o/r merge 7',
+      "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'",
+      "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {}) { clientMutationId } }'",
+      "glab api graphql -f query='mutation { mergeRequestAccept(input: {}) { errors } }'",
+      'glab api -X POST projects/1/merge_trains/merge_requests/58',
     ];
     assert.deepEqual(unblocked(commands), []);
   });
@@ -183,6 +190,9 @@ describe('real deny list', () => {
       'glab api projects/1/merge_requests/58/notes',
       'gh pr view 7 --json mergedAt',
       'gh api repos/o/r/pulls/7/comments',
+      'git merge --ff-only origin/main',
+      'git log --merges',
+      'glab api projects/1/merge_requests/58/approvals',
     ];
     assert.deepEqual(blocked(commands), []);
   });
@@ -200,6 +210,14 @@ describe('real deny list', () => {
       'docker exec db psql -U u -c "truncate member_preferences cascade"',
     ];
     assert.deepEqual(unblocked(commands), []);
-    assert.deepEqual(blocked(['truncate -s 0 file.log']), []);
+  });
+
+  it('real deny list allows shell truncate and SQL keywords in prose', () => {
+    const commands = [
+      'truncate -s 0 file.log',
+      'grep -rn "TRUNCATE " migrations/',
+      'git commit -m "docs: explain TRUNCATE usage"',
+    ];
+    assert.deepEqual(blocked(commands), []);
   });
 });

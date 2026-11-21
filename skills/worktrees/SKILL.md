@@ -17,6 +17,7 @@ Strip the `--all` flag from `$ARGUMENTS` and dispatch:
 
 - If `--all` was passed: `~/.agents/scripts/worktree-prune.sh audit-all <remaining-args>`
 - Otherwise: `~/.agents/scripts/worktree-prune.sh <args>`
+- After any `--apply` removal, converge each touched repo's main checkout: `~/.agents/scripts/checkout-converge.sh <repo>`. It fetches the default branch, fast-forwards, and stashes-and-notes a dirty main checkout. In `--all` mode this adds one fetch per repo.
 
 ## Safety rule
 

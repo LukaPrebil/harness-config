@@ -27,7 +27,7 @@ The repo answers with three design choices:
 | `settings.json` | Hook registry, deny list, and Claude Code settings | Read by each host. See [hooks](hooks.md) |
 | `hooks/` | Guardrail scripts | Run on tool calls and session events |
 | `pi/` | Pi extensions, settings, models, and MCP servers | Linked into each Pi agent dir |
-| `scripts/` | Host setup, CI checks, status line, notifications, worktree pruning | Run by you, CI, hooks, and skills |
+| `scripts/` | Host setup, CI checks, status line, notifications, worktree pruning, checkout convergence | Run by you, CI, hooks, and skills |
 | `templates/`, `references/` | Doc templates; security and testing checklists | Named by skills and personas through `~/.agents/` |
 | `tests/` | Tests for the hooks, host setup, and Pi extensions | Run by CI. See [contributing](contributing.md) |
 | `CONTEXT.md` | Glossary of the terms these docs use | Read by people and by `/grill-with-docs` |

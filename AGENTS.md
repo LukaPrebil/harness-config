@@ -100,6 +100,7 @@ Load `rulebook` whenever the task needs detailed language, test, database, infra
 ## Git and delivery
 
 - Work on a feature branch. Never commit or push to `main` or `master`, even with user approval.
+- Keep the main checkout on the latest default branch; branch work lives in worktrees. `~/.agents/scripts/checkout-converge.sh` converges a drifted checkout.
 - Use conventional commit messages and do not add AI attribution or co-author trailers.
 - Commit, push, and open a pull request for completed feature-branch work without asking.
 - Run the repository's complete quality gate before pushing.

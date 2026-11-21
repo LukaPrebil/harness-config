@@ -33,7 +33,8 @@ Default to `feat/<slug>`. If the user's request looks like a bug fix, use `fix/<
 4. `cd` into the worktree dir for all subsequent operations.
 5. If `package-lock.json` exists, run `npm ci`. If only `package.json` exists, run `npm install --no-package-lock`, because `npm ci` needs a lockfile. The worktree holds only tracked files, and the push hooks need `node_modules`.
 6. If `git config core.hooksPath` is `.husky/_`, check that `.husky/_` exists. If it does not, stop and report it: git skips every repo hook without a word, and the pre-push gate blocks the push.
-7. Report the new working dir and branch name, then continue with the task.
+7. Return the main checkout to the latest default branch: `bash ~/.agents/scripts/checkout-converge.sh "$PWD"`. It resolves the main checkout from the worktree, fast-forwards, checks out the default branch, and stashes a dirty tree with a named, findable message instead of leaving it behind.
+8. Report the new working dir and branch name, then continue with the task.
 
 ## After creation
 

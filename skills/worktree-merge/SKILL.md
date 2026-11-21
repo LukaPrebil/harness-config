@@ -24,7 +24,8 @@ If the branch is not safe to remove, stop and explain what's still pending (unpu
 2. Move out of the worktree to the main checkout (`cd "$(git rev-parse --git-common-dir)/.."`).
 3. Remove the worktree: `git worktree remove "$WORKTREE"`. If it has uncommitted changes and `--force` was passed, use `git worktree remove --force "$WORKTREE"`.
 4. Delete the local branch: `git branch -d "$BRANCH"` (or `-D` with `--force`).
-5. Report what was cleaned up.
+5. Converge the main checkout: `bash ~/.agents/scripts/checkout-converge.sh "$PWD"`. It returns the checkout to the latest default branch, stashing any dirt with a named message.
+6. Report what was cleaned up.
 
 ## After cleanup
 
@@ -38,3 +39,4 @@ When several lane-mode teammates finish, merge their branches into the integrati
 2. Merge one branch. Resolve any conflict with `/resolve-conflicts` before merging the next.
 3. After the last merge, run the full test suite, typecheck, and lint.
 4. Prune the worktrees: `~/.agents/scripts/worktree-prune.sh --apply`. It removes only worktrees whose branch is upstream-gone or merged into the default, which is the post-merge state. Anything still active survives.
+5. Converge each lane repo's main checkout: `bash ~/.agents/scripts/checkout-converge.sh <repo>`.

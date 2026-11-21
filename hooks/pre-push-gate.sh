@@ -43,6 +43,50 @@ install_cmd() {
   esac
 }
 
+# audit_base: print the merge-base this push builds on, or nothing. The
+# branch's upstream is the already-pushed state, so its merge-base is exactly
+# the delta this push adds. origin/HEAD, then the usual default branches,
+# cover a first push. No base means the pushed dependency diff is unknowable,
+# so the audit runs unconditionally.
+audit_base() {
+  local base mb
+  for base in "$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)" \
+              "$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)" \
+              origin/main origin/master; do
+    [ -n "$base" ] || continue
+    git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1 || continue
+    mb=$(git merge-base HEAD "$base" 2>/dev/null) || continue
+    [ -n "$mb" ] && { printf '%s\n' "$mb"; return; }
+  done
+}
+
+# dependency_files_changed <merge-base>: succeed when the committed diff
+# touches a manifest or lockfile anywhere in the tree. A script-only
+# package.json edit triggers the audit too; one extra audit is cheaper than
+# field-level diffing.
+dependency_files_changed() {
+  git diff --name-only "$1" HEAD 2>/dev/null | grep -qE \
+    '(^|/)(package(-lock)?\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$'
+}
+
+# baseline_lockfile <merge-base> <manager>: print the lockfile the manager's
+# audit reads when one exists in the merge-base tree, else nothing. A branch
+# that introduces the lockfile carries only new findings, so no baseline
+# comparison applies to it.
+baseline_lockfile() {
+  local mb="$1" pm="$2" f
+  case "$pm" in
+    npm) for f in package-lock.json npm-shrinkwrap.json; do
+           git cat-file -e "$mb:$f" 2>/dev/null && { printf '%s\n' "$f"; return; }
+         done ;;
+    bun) for f in bun.lock bun.lockb; do
+           git cat-file -e "$mb:$f" 2>/dev/null && { printf '%s\n' "$f"; return; }
+         done ;;
+    pnpm) git cat-file -e "$mb:pnpm-lock.yaml" 2>/dev/null && printf '%s\n' pnpm-lock.yaml ;;
+    yarn) git cat-file -e "$mb:yarn.lock" 2>/dev/null && printf '%s\n' yarn.lock ;;
+  esac
+}
+
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
@@ -183,30 +227,79 @@ if [ "$PROJECT_TYPE" = "node" ]; then
   else
     has_script build && run_step "build" "CI=true $RUN build"
   fi
-  # Only critical advisories block: pre-existing high/moderate transitive CVEs are
-  # Dependabot's job, not a push gate's, and would otherwise block unrelated work.
+  # Only critical advisories block, and only when the pushed diff changes a
+  # dependency file: pre-existing high/moderate transitive CVEs are
+  # Dependabot's job, not a push gate's, and an unchanged dependency set
+  # cannot grow a new critical finding. A failing branch audit is then
+  # compared against its merge-base, audited from the committed tree with
+  # no install: a base that fails the same way carries an inherited finding,
+  # so the push passes with a notice; a base that passes means the finding
+  # is new, so the push blocks. The comparison reads exit codes only, so a
+  # dependency change that swaps one inherited critical for a different
+  # critical still passes; catching that needs a human or CI.
   # npm audit needs package-lock.json, so a Bun repo audits its bun.lock with Bun.
+  AUDIT_CMD=""
+  AUDIT_PM="$PM"
   if [ -f bun.lock ] || [ -f bun.lockb ]; then
+    AUDIT_PM=bun
     if command -v bun >/dev/null 2>&1; then
-      run_step "audit" "bun audit --audit-level=critical"
+      AUDIT_CMD="bun audit --audit-level=critical"
     else
       echo "[pre-push-gate] audit skipped: bun is not installed." >&2
     fi
   else
     case "$PM" in
-      npm) run_step "audit" "npm audit --audit-level=critical" ;;
+      npm) AUDIT_CMD="npm audit --audit-level=critical" ;;
       # Not --json: that form exits 1 on a finding of any severity.
-      pnpm) run_step "audit" "pnpm audit --audit-level critical" ;;
+      pnpm) AUDIT_CMD="pnpm audit --audit-level critical" ;;
       # Yarn Classic ignores --level for its exit code, a severity bitmask where
       # 16 is critical. Without --all --recursive, Yarn Berry audits only the
       # current workspace's direct deps.
       yarn)
         case "$(yarn --version 2>/dev/null)" in
-          1.*) run_step "audit" 'yarn audit --level critical; [ $(( $? & 16 )) -eq 0 ]' ;;
-          *) run_step "audit" "yarn npm audit --all --recursive --severity critical" ;;
+          1.*) AUDIT_CMD='yarn audit --level critical; [ $(( $? & 16 )) -eq 0 ]' ;;
+          *) AUDIT_CMD="yarn npm audit --all --recursive --severity critical" ;;
         esac
         ;;
     esac
+  fi
+  if [ -n "$AUDIT_CMD" ]; then
+    MB=$(audit_base)
+    if [ -z "$MB" ]; then
+      RUN_AUDIT=1
+    elif dependency_files_changed "$MB"; then
+      RUN_AUDIT=1
+    else
+      RUN_AUDIT=0
+      echo "[pre-push-gate] audit skipped: no dependency file changed since the merge-base." >&2
+    fi
+    if [ "$RUN_AUDIT" = 1 ]; then
+      echo "[pre-push-gate] audit..." >&2
+      AUDIT_OUT=$(bash -c "$AUDIT_CMD" 2>&1)
+      AUDIT_STATUS=$?
+      if [ "$AUDIT_STATUS" -ne 0 ]; then
+        if [ -z "$MB" ]; then
+          echo "[pre-push-gate] audit FAILED and no merge-base is available to compare against. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+          echo "$AUDIT_OUT" | tail -40 >&2
+          exit 2
+        fi
+        if [ -z "$(baseline_lockfile "$MB" "$AUDIT_PM")" ]; then
+          echo "[pre-push-gate] audit FAILED and the merge-base lacks the $AUDIT_PM lockfile, so the finding is new. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+          echo "$AUDIT_OUT" | tail -40 >&2
+          exit 2
+        fi
+        BASE_TMP=$(mktemp -d "${TMPDIR:-/tmp}/pre-push-audit-base.XXXXXX")
+        git archive "$MB" | tar -x -C "$BASE_TMP"
+        if (cd "$BASE_TMP" && bash -c "$AUDIT_CMD") >/dev/null 2>&1; then
+          rm -rf "${BASE_TMP:?}"
+          echo "[pre-push-gate] audit FAILED with a critical finding the merge-base does not carry. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+          echo "$AUDIT_OUT" | tail -40 >&2
+          exit 2
+        fi
+        rm -rf "${BASE_TMP:?}"
+        echo "[pre-push-gate] audit FAILED, but the merge-base fails the same audit, so the critical is inherited, not new. Pushing; fix the inherited finding soon." >&2
+      fi
+    fi
   fi
 fi
 

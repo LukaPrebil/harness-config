@@ -202,13 +202,13 @@
             "type": "command",
             "command": "HOOK=\"$CLAUDE_PROJECT_DIR/hooks/pre-push-gate.sh\"; [ -x \"$HOOK\" ] || HOOK=\"$HOME/.claude/hooks/pre-push-gate.sh\"; [ -x \"$HOOK\" ] && exec \"$HOOK\"",
             "if": "Bash(git push *)",
-            "timeout": 300
+            "timeout": 600
           },
           {
             "type": "command",
             "command": "HOOK=\"$CLAUDE_PROJECT_DIR/hooks/pre-push-gate.sh\"; [ -x \"$HOOK\" ] || HOOK=\"$HOME/.claude/hooks/pre-push-gate.sh\"; [ -x \"$HOOK\" ] && exec \"$HOOK\"",
             "if": "Bash(git -C *)",
-            "timeout": 300
+            "timeout": 600
           },
           {
             "type": "command",

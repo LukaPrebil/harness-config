@@ -44,15 +44,17 @@ install_cmd() {
 }
 
 # audit_base: print the merge-base this push builds on, or nothing. The
-# branch's upstream is the already-pushed state, so its merge-base is exactly
-# the delta this push adds. origin/HEAD, then the usual default branches,
-# cover a first push. No base means the pushed dependency diff is unknowable,
-# so the audit runs unconditionally.
+# remote's default comes first - origin/HEAD, then the usual default
+# branches - because the rule being enforced is "already failing on main",
+# and a branch's @{upstream} is agent-writable and can point anywhere, so it
+# is only a last resort for a repo with a non-standard default and no
+# origin/HEAD. No base means the pushed dependency diff is unknowable, so
+# the audit runs unconditionally.
 audit_base() {
   local base mb
-  for base in "$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)" \
-              "$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)" \
-              origin/main origin/master; do
+  for base in "$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)" \
+              origin/main origin/master \
+              "$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)"; do
     [ -n "$base" ] || continue
     git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1 || continue
     mb=$(git merge-base HEAD "$base" 2>/dev/null) || continue
@@ -63,28 +65,57 @@ audit_base() {
 # dependency_files_changed <merge-base>: succeed when the committed diff
 # touches a manifest or lockfile anywhere in the tree. A script-only
 # package.json edit triggers the audit too; one extra audit is cheaper than
-# field-level diffing.
+# field-level diffing. A git failure fails closed: the audit runs.
 dependency_files_changed() {
-  git diff --name-only "$1" HEAD 2>/dev/null | grep -qE \
+  local out
+  out=$(git diff --name-only "$1" HEAD 2>/dev/null) || return 0
+  printf '%s\n' "$out" | grep -qE \
     '(^|/)(package(-lock)?\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$'
 }
 
-# baseline_lockfile <merge-base> <manager>: print the lockfile the manager's
-# audit reads when one exists in the merge-base tree, else nothing. A branch
-# that introduces the lockfile carries only new findings, so no baseline
-# comparison applies to it.
-baseline_lockfile() {
-  local mb="$1" pm="$2" f
+# extract_tree <rev>: print a fresh temp dir holding the committed tree at
+# <rev>, or print nothing on failure. Audits run on extracted committed
+# trees, never on the working tree, which can hold an uncommitted revert of
+# the very lockfile a push ships.
+extract_tree() {
+  local tmp
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/pre-push-audit.XXXXXX" 2>/dev/null) || return 1
+  # tar exits 0 even on empty input, so an empty result is checked explicitly.
+  if ! { git archive "$1" 2>/dev/null | tar -x -C "$tmp" 2>/dev/null; } \
+    || [ -z "$(ls -A "$tmp" 2>/dev/null)" ]; then
+    rm -rf "${tmp:?}"
+    return 1
+  fi
+  printf '%s\n' "$tmp"
+}
+
+# tree_lockfile <dir> <manager>: print the lockfile the manager's audit
+# reads when one exists under <dir>, else nothing. Extraction is asserted
+# through this, not through the archive pipeline alone, because tar exits 0
+# even on empty input. A tree with no lockfile cannot be audited, and a base
+# without one means every finding is new.
+tree_lockfile() {
+  local dir="$1" pm="$2" f
   case "$pm" in
     npm) for f in package-lock.json npm-shrinkwrap.json; do
-           git cat-file -e "$mb:$f" 2>/dev/null && { printf '%s\n' "$f"; return; }
+           [ -f "$dir/$f" ] && { printf '%s\n' "$f"; return; }
          done ;;
     bun) for f in bun.lock bun.lockb; do
-           git cat-file -e "$mb:$f" 2>/dev/null && { printf '%s\n' "$f"; return; }
+           [ -f "$dir/$f" ] && { printf '%s\n' "$f"; return; }
          done ;;
-    pnpm) git cat-file -e "$mb:pnpm-lock.yaml" 2>/dev/null && printf '%s\n' pnpm-lock.yaml ;;
-    yarn) git cat-file -e "$mb:yarn.lock" 2>/dev/null && printf '%s\n' yarn.lock ;;
+    pnpm) [ -f "$dir/pnpm-lock.yaml" ] && printf '%s\n' pnpm-lock.yaml ;;
+    yarn) [ -f "$dir/yarn.lock" ] && printf '%s\n' yarn.lock ;;
   esac
+}
+
+# findings_report <text>: succeed when an audit output looks like a findings
+# report. Every supported audit tool prints "vulnerabilities" in its report,
+# while a tool or registry failure prints an error instead. Comparing exit
+# codes alone would read an offline failure on both sides as "inherited" and
+# fail the gate open (found in review), so a failed audit without this
+# signature blocks as inconclusive on either side.
+findings_report() {
+  printf '%s' "$1" | grep -qi 'vulnerabilit'
 }
 
 INPUT=$(cat)
@@ -230,13 +261,18 @@ if [ "$PROJECT_TYPE" = "node" ]; then
   # Only critical advisories block, and only when the pushed diff changes a
   # dependency file: pre-existing high/moderate transitive CVEs are
   # Dependabot's job, not a push gate's, and an unchanged dependency set
-  # cannot grow a new critical finding. A failing branch audit is then
-  # compared against its merge-base, audited from the committed tree with
-  # no install: a base that fails the same way carries an inherited finding,
-  # so the push passes with a notice; a base that passes means the finding
-  # is new, so the push blocks. The comparison reads exit codes only, so a
-  # dependency change that swaps one inherited critical for a different
-  # critical still passes; catching that needs a human or CI.
+  # cannot grow a new critical finding. Both audits run on extracted
+  # committed trees, never the working tree, which can hold an uncommitted
+  # revert of the very lockfile a push ships. A failing branch audit is
+  # compared against its merge-base: a base that fails the same way carries
+  # an inherited finding, so the push passes with a notice; a base that
+  # passes means the finding is new, so the push blocks. The comparison
+  # reads exit codes only, so among findings reports any baseline failure
+  # counts as inherited, and a change that swaps one inherited critical for
+  # a different critical passes too; a human or CI is the backstop for
+  # that. An audit that fails without a findings signature blocks as
+  # inconclusive instead. A push of a ref that is not checked out is
+  # not audited, as it never was; the audit follows HEAD.
   # npm audit needs package-lock.json, so a Bun repo audits its bun.lock with Bun.
   AUDIT_CMD=""
   AUDIT_PM="$PM"
@@ -275,29 +311,65 @@ if [ "$PROJECT_TYPE" = "node" ]; then
     fi
     if [ "$RUN_AUDIT" = 1 ]; then
       echo "[pre-push-gate] audit..." >&2
-      AUDIT_OUT=$(bash -c "$AUDIT_CMD" 2>&1)
+      PREFIX=$(git rev-parse --show-prefix)
+      AUDIT_DIR="$PROJECT_ROOT"
+      BRANCH_TMP=$(extract_tree HEAD)
+      if [ -n "$BRANCH_TMP" ]; then
+        trap 'if [ -n "${BRANCH_TMP:-}" ] || [ -n "${BASE_TMP:-}" ]; then rm -rf "$BRANCH_TMP" "$BASE_TMP" 2>/dev/null; fi; :' EXIT
+        if [ -z "$(tree_lockfile "${BRANCH_TMP}/${PREFIX}" "$AUDIT_PM")" ]; then
+          echo "[pre-push-gate] audit FAILED setup: the pushed tree has no $AUDIT_PM lockfile to audit. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+          exit 2
+        fi
+        AUDIT_DIR="${BRANCH_TMP}/${PREFIX}"
+      elif git rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
+        echo "[pre-push-gate] audit FAILED setup: the pushed tree could not be extracted. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+        exit 2
+      fi
+      # An unborn HEAD leaves AUDIT_DIR on the working tree, the only tree
+      # there is; nothing has been committed, so nothing else can be pushed.
+      AUDIT_OUT=$( (cd "$AUDIT_DIR" && bash -c "$AUDIT_CMD") 2>&1 )
       AUDIT_STATUS=$?
+      if [ -n "$BRANCH_TMP" ]; then
+        rm -rf "${BRANCH_TMP:?}"
+      fi
       if [ "$AUDIT_STATUS" -ne 0 ]; then
+        if ! findings_report "$AUDIT_OUT"; then
+          echo "[pre-push-gate] audit FAILED without a findings report (tool or registry failure), so the comparison cannot run. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+          echo "$AUDIT_OUT" | tail -40 >&2
+          exit 2
+        fi
         if [ -z "$MB" ]; then
           echo "[pre-push-gate] audit FAILED and no merge-base is available to compare against. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
           echo "$AUDIT_OUT" | tail -40 >&2
           exit 2
         fi
-        if [ -z "$(baseline_lockfile "$MB" "$AUDIT_PM")" ]; then
+        BASE_TMP=$(extract_tree "$MB")
+        if [ -z "$BASE_TMP" ]; then
+          echo "[pre-push-gate] audit FAILED and the merge-base tree could not be prepared, so the finding cannot be compared. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+          echo "$AUDIT_OUT" | tail -40 >&2
+          exit 2
+        fi
+        if [ -z "$(tree_lockfile "${BASE_TMP}/${PREFIX}" "$AUDIT_PM")" ]; then
           echo "[pre-push-gate] audit FAILED and the merge-base lacks the $AUDIT_PM lockfile, so the finding is new. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
           echo "$AUDIT_OUT" | tail -40 >&2
           exit 2
         fi
-        BASE_TMP=$(mktemp -d "${TMPDIR:-/tmp}/pre-push-audit-base.XXXXXX")
-        git archive "$MB" | tar -x -C "$BASE_TMP"
-        if (cd "$BASE_TMP" && bash -c "$AUDIT_CMD") >/dev/null 2>&1; then
+        BASE_OUT=$( (cd "${BASE_TMP}/${PREFIX}" && bash -c "$AUDIT_CMD") 2>&1 )
+        BASE_STATUS=$?
+        if [ "$BASE_STATUS" -eq 0 ]; then
           rm -rf "${BASE_TMP:?}"
           echo "[pre-push-gate] audit FAILED with a critical finding the merge-base does not carry. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
           echo "$AUDIT_OUT" | tail -40 >&2
           exit 2
         fi
+        if ! findings_report "$BASE_OUT"; then
+          echo "[pre-push-gate] audit FAILED and the merge-base audit failed without a findings report, so the comparison is inconclusive. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+          echo "$AUDIT_OUT" | tail -40 >&2
+          exit 2
+        fi
         rm -rf "${BASE_TMP:?}"
-        echo "[pre-push-gate] audit FAILED, but the merge-base fails the same audit, so the critical is inherited, not new. Pushing; fix the inherited finding soon." >&2
+        echo "[pre-push-gate] audit FAILED, but the merge-base $MB fails the same audit, so the critical is inherited, not new. Pushing; fix the inherited finding soon." >&2
+        echo "$AUDIT_OUT" | tail -8 >&2
       fi
     fi
   fi

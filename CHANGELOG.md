@@ -1,3 +1,30 @@
+# [0.9.0](https://github.com/LukaPrebil/harness-config/compare/v0.8.0...v0.9.0) (2026-11-22)
+
+
+### Bug Fixes
+
+* **deny:** block GitLab and API merges, widen SQL case coverage ([#50](https://github.com/LukaPrebil/harness-config/issues/50)) ([b864bba](https://github.com/LukaPrebil/harness-config/commit/b864bba9b697a56e56efcd08c8081eaf3c6f734c))
+* **deps:** bump Node.js to 24.22.1 for October 2026 security release ([#199](https://github.com/LukaPrebil/harness-config/issues/199)) ([34d8159](https://github.com/LukaPrebil/harness-config/commit/34d8159b90b38f473a6cf85951ce675ff58ce66e))
+* **herdr:** keep the agent panel on the priority sort ([9daccfb](https://github.com/LukaPrebil/harness-config/commit/9daccfbd5d6a7b06aed13c79d4e3ce9e428c73c9))
+* **pi:** map advisory persona tools through agent overrides ([#52](https://github.com/LukaPrebil/harness-config/issues/52)) ([ea27132](https://github.com/LukaPrebil/harness-config/commit/ea2713228438c412455cf1179d5fc82a0911927f))
+* **pi:** scope synced skill buckets to their Profile ([1ce6718](https://github.com/LukaPrebil/harness-config/commit/1ce6718433e46796318cb8f01c45852b42cb29fd))
+* **pi:** track the :1017 personal model and assert it ([b13f263](https://github.com/LukaPrebil/harness-config/commit/b13f263e77a1d1d1297d291db501e40cf5d45cd6))
+
+
+### Features
+
+* dependency audit, checkout convergence, and config cleanup ([#51](https://github.com/LukaPrebil/harness-config/issues/51)) ([09440ff](https://github.com/LukaPrebil/harness-config/commit/09440ff6e900a0106a07f2c72623a75eedaa8a18))
+* **hooks:** show repo, branch, worktree, and repo color in the herdr sidebar ([#201](https://github.com/LukaPrebil/harness-config/issues/201)) ([2b89a12](https://github.com/LukaPrebil/harness-config/commit/2b89a12698472501b88720a5d2ccfe5ed5793172))
+* **hooks:** watch opened PRs until they are ready to merge ([#197](https://github.com/LukaPrebil/harness-config/issues/197)) ([150d773](https://github.com/LukaPrebil/harness-config/commit/150d773886e3d890a07c09e63363d55a8aad1e76))
+* **settings:** allow read-only gh run list and view ([#200](https://github.com/LukaPrebil/harness-config/issues/200)) ([9607275](https://github.com/LukaPrebil/harness-config/commit/9607275354e7e86f77b3bc9f450f5d3bea2e524f))
+* **settings:** allow read-only spacectl stack commands ([#202](https://github.com/LukaPrebil/harness-config/issues/202)) ([b305432](https://github.com/LukaPrebil/harness-config/commit/b305432e20442d13dedf77b2f7ed796299557aa6))
+* **skills:** add the subagent cache TTL and the harness learning edge ([#196](https://github.com/LukaPrebil/harness-config/issues/196)) ([62816e2](https://github.com/LukaPrebil/harness-config/commit/62816e2b2b3d6ad8ac9df686e11be144771969a2))
+
+
+### Reverts
+
+* **pi:** drop the two trial pins that earned nothing ([#48](https://github.com/LukaPrebil/harness-config/issues/48)) ([0b64ff0](https://github.com/LukaPrebil/harness-config/commit/0b64ff0348de8bcc339e9b6786635db1d641b9bd))
+
 # [0.8.0](https://github.com/LukaPrebil/harness-config/compare/v0.7.0...v0.8.0) (2026-10-08)
 
 

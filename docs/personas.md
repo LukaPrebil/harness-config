@@ -75,6 +75,8 @@ Personas share a five-section skeleton, [decided](decisions.md#lean-personas-tha
 
 Advisory personas keep Bash, which they need for `git diff` and `gh`. A write is therefore still possible through a shell command. The missing edit tools remove the easy path, and the brief does the rest.
 
+The frontmatter `tools:` list uses Claude Code's tool names, which Pi does not register. The Pi translation lives in `subagents.agentOverrides` in `pi/settings.personal.json` and `pi/settings.work.json`: each advisory persona maps to Pi's tool names (`read`, `grep`, `find`, `bash`; `web_search` and `fetch_content` for the personas whose frontmatter carries `WebFetch, WebSearch`). Pi treats the field as a strict allowlist, so without the override every persona spawn under Pi dies with `requested unavailable child tools`. The web names come from the `pi-web-access` extension, which only background children load, so these personas must keep spawning as background children; a forced foreground spawn fails loudly on those two names.
+
 Doc Reader reads untrusted document text, so it gets no shell and no web access. That keeps a hostile document from steering it into actions.
 
 ## Lane mode and panel mode

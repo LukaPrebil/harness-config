@@ -158,6 +158,10 @@ _Avoid_: "test report".
 The per-slice cycle in `build`: the QA Expert writes and locks failing tests, an implementer makes them pass, a read-only panel reviews, and fixes are re-reviewed up to three rounds.
 _Avoid_: "TDD loop" for the multi-role cycle.
 
+**Skeptic pass**:
+The `review-pr` stage that tries to disprove each finding against the code, existing patterns, and upstream references before the user sees it; every finding either survives with verified evidence or dies with a one-line reason.
+_Avoid_: "verification stage", "second opinion" - the skeptic's job is refutation, not double-checking.
+
 **Blocked on me**:
 The heading that ends a run and a PR body, listing what only the user can do: manual criteria, escalations, and drafted replies to humans.
 _Avoid_: "action items", "TODO".
@@ -225,6 +229,8 @@ _Avoid_: "push audit", "audit every push".
 - A **Reusable discipline** is **Model-invoked**, except `wait-what`, which is **User-invoked**; an **Orchestrator** may invoke disciplines.
 - `wayfinder` resolves **Decision tickets** one per session until the fog clears, then hands to the spec stage.
 - **Lane mode** is for mutating work (build/implementation); **Panel mode** is for read-only work (research, grilling, design).
+- A **Slice loop** includes at most three review rounds; a **Skeptic pass** runs once, before the user sees anything, and its dropped-findings list is what makes the review credible
+- **Advisory personas** make natural skeptics: they cannot edit, so refuting a finding is their only available action
 - An **Advisory persona** can join **Panel mode** only; a **Lane mode** teammate must be a **Writer persona**.
 - An **Always-loaded rule** competes for attention in every session; an **On-demand rule** does not. A rule with a mechanical trigger (file path or unambiguous phrase) belongs on demand.
 - The **Prose gate** and the **Judgment tier** split one policy by what a regex can see. A pattern that fires on correct usage belongs in the **Judgment tier**, not the gate.

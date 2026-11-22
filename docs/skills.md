@@ -47,7 +47,7 @@ Rows marked **user** start only when you type them.
 | `mr` | model | Opens a PR or MR after the gate, commit format, and title checks pass |
 | `ci` | model | Watches the branch's pipeline and reacts to pass, fail, and manual states |
 | `pr-comments` | model | Fixes code for review comments, replies to bots, and drafts replies to humans |
-| `review-pr` | model | Reviews a PR with severity-tagged findings |
+| `review-pr` | model | Vetted multi-stage review: parallel reviewers, a skeptic refuting findings, standalone drafts, posting after approval |
 | `prune` | model | Reviews code only for over-engineering and lists what to delete |
 | `resolve-conflicts` | model | Resolves a merge or rebase conflict by recovering each side's intent |
 

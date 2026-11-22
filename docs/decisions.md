@@ -82,6 +82,8 @@ The design decisions this config still runs on. Each entry states the choice and
 - Seven skills never fired on either profile in 14 months and were dropped: `ship`, `to-issues`, `constraints`, `fix-issue`, `improve-codebase-architecture`, `observability`, and `prototype`. Every skill description loads in every session, so unused weight costs attention everywhere; git history recovers any of them.
 - `test` merged into `build`, whose slice loop already owned test writing; `build` ran 65 times in the same window, `test` zero.
 - Zero-use skills kept for being event-driven or irreplaceable: `sentry-issue`, `diagram`, `wizard`, `wait-what`, `prune`, `resolve-conflicts`.
+- `rulebook`'s description stays absolute - "before implementation, review, documentation, Git operations, delegation, or other work" - on purpose: for a rules router, breadth is the design, and the model decides from there which rules file applies. Narrowing it invites skipping exactly the load it exists for.
+- `review-pr` gained the vetting protocol: reviewers fan out with bounded reports, a skeptic refutes every finding against the code and upstream references before the user sees it, drafts are written to stand alone for the MR author, and nothing posts without approval. Evidence: seven sessions in the usage report spent doing exactly this loop by hand.
 
 ## Hosts
 

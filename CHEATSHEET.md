@@ -44,7 +44,7 @@ Some skills enforce a discipline plain English would skip. Use the slash when yo
 - `/spec` - stakeholder-framed requirements doc
 - `/verify-done` - the repo's `npm run verify` when declared, otherwise every CI step in CI's exact order
 - `/mr` - verify pass at HEAD + commit-format + title-regex gates before opening
-- `/review-pr` - severity-tagged review scaffolding
+- `/review-pr` - vetted review: reviewers, skeptic, standalone drafts, posting after approval
 
 ## Skills that fire on their own
 

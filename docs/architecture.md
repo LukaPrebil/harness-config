@@ -22,7 +22,7 @@ The repo answers with three design choices:
 | --- | --- | --- |
 | `AGENTS.md` | Shared instructions: priorities, writing, workflow, safety, git | Loaded at session start on every host |
 | `rules/` | 15 detailed standards, such as git, tests, and comments | See [rules](rules.md) |
-| `skills/` | 38 workflows, such as `/build`, `/mr`, and `/debug` | Picked by description, or typed as `/name`. See [skills](skills.md) |
+| `skills/` | 30 workflows, such as `/build`, `/mr`, and `/debug` | Picked by description, or typed as `/name`. See [skills](skills.md) |
 | `agents/` | 18 expert personas | Spawned as subagents. See [personas](personas.md) |
 | `settings.json` | Hook registry, deny list, and Claude Code settings | Read by each host. See [hooks](hooks.md) |
 | `hooks/` | Guardrail scripts | Run on tool calls and session events |
@@ -95,9 +95,9 @@ Skills and hooks share state through files under `.claude/state/` in the project
 
 | Path | Written by | Read by |
 | --- | --- | --- |
-| `research/` | `/research`, `/debug`, `/fix-issue` | Later sessions |
+| `research/` | `/research`, `/debug` | Later sessions |
 | `specs/` | `/spec` | `/plan`, Spec Verifier, `pre-pr-evidence-gate.sh` |
-| `plans/` | `/plan`, `/grill-with-docs`, `/fix-issue`, `/drive-fleet` | `/build`, `/worktree` |
+| `plans/` | `/plan`, `/grill-with-docs`, `/drive-fleet` | `/build`, `/worktree` |
 | `sessions/` | `/summarize` | People |
 | `runs/<branch>/tasks.md` | `/deliver`, `/build` | The same skills, when resuming after compaction |
 | `runs/<branch>/tests.lock` | QA Expert | `pre-edit-test-lock.sh` |

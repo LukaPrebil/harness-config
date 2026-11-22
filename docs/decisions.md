@@ -72,10 +72,17 @@ The design decisions this config still runs on. Each entry states the choice and
 
 - Upstream skills are adapted, not copied. Each names its upstream, usually in a `> Source:` line, and drifts from upstream on purpose.
 - Orchestration skills stay model-invoked, so the model enters workflow phases on its own. `wayfinder` and `deliver` are the exceptions: a long run starts only when the user asks.
-- Upstream's user-invoked `to-spec` and `implement` stages are not adopted. `to-tickets` is adopted as the model-invoked `to-issues`.
-- Reusable disciplines merge into an existing skill, such as `test`, `debug`, or `review-pr`, when one fits.
+- Upstream's user-invoked `to-spec` and `implement` stages are not adopted. `to-tickets` was adopted as the model-invoked `to-issues`, then dropped in the 2026-11-21 skills audit because no issue tracker is in use.
+- Reusable disciplines merge into an existing skill, such as `build` or `review-pr`, when one fits. The 2026-11-21 audit merged `test` into `build` the same way.
 - `wayfinder` tracks multi-session efforts in files under `.claude/state/`, because this setup runs no issue tracker.
 - Re-vendoring is manual. No upstream commit is pinned.
+
+### Audit against usage (2026-11-21)
+
+- Seven skills never fired on either profile in 14 months and were dropped: `ship`, `to-issues`, `constraints`, `fix-issue`, `improve-codebase-architecture`, `observability`, and `prototype`. Every skill description loads in every session, so unused weight costs attention everywhere; git history recovers any of them.
+- `test` merged into `build`, whose slice loop already owned test writing; `build` ran 65 times in the same window, `test` zero.
+- Zero-use skills kept for being event-driven or irreplaceable: `sentry-issue`, `diagram`, `wizard`, `wait-what`, `prune`, `resolve-conflicts`.
+- `rulebook`'s description fired on every task by naming all of them; it now names the specific `rules/` topics.
 
 ## Hosts
 

@@ -43,7 +43,7 @@ Pick the top candidate. If two are tied or the user has a strong prior, ask the 
 ## Phase 3 - Fix
 
 - Smallest change that fixes the root cause first, per AGENTS.md. State the change before applying it. `(review-time: see section note)`
-- Add a regression test that reproduces the original failure and now passes - only at a correct seam that exercises the real bug pattern; if no such seam exists, that itself is the finding, note it and hand off to `/improve-codebase-architecture`. `(review-time: see section note)`
+- Add a regression test that reproduces the original failure and now passes - only at a correct seam that exercises the real bug pattern; if no such seam exists, that itself is the finding: note it and plan a follow-up. `(review-time: see section note)`
 - Remove all temporary instrumentation before committing - tag every debug log with a unique prefix like `[DEBUG-a4f2]` when you add it, so cleanup is a single grep. `(review-time: see section note)`
 - Run `/verify-done` (lint + typecheck + test + build). `(review-time: see section note)`
 - Commit on a feature branch with a conventional message that names the root cause. `(review-time: see section note)`

@@ -82,7 +82,6 @@ The design decisions this config still runs on. Each entry states the choice and
 - Seven skills never fired on either profile in 14 months and were dropped: `ship`, `to-issues`, `constraints`, `fix-issue`, `improve-codebase-architecture`, `observability`, and `prototype`. Every skill description loads in every session, so unused weight costs attention everywhere; git history recovers any of them.
 - `test` merged into `build`, whose slice loop already owned test writing; `build` ran 65 times in the same window, `test` zero.
 - Zero-use skills kept for being event-driven or irreplaceable: `sentry-issue`, `diagram`, `wizard`, `wait-what`, `prune`, `resolve-conflicts`.
-- `rulebook`'s description fired on every task by naming all of them; it now names the specific `rules/` topics.
 
 ## Hosts
 

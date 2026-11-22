@@ -1,6 +1,6 @@
 ---
 name: rulebook
-description: "Routes agent hosts to the applicable detailed standards in this repo's rules directory. Load when a task needs standards beyond AGENTS.md: detailed language, tests, databases, infrastructure, comments, diagrams, rule authoring, or Git conventions. Use when the user says 'rulebook' or asks which standards apply."
+description: "Routes agent hosts to the applicable detailed standards in this repo's rules directory. Use before implementation, review, documentation, Git operations, delegation, or other work that needs rules beyond AGENTS.md."
 ---
 
 # Rulebook

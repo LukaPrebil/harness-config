@@ -7,14 +7,14 @@ A skill is a `skills/<name>/SKILL.md` file whose `description` says when to use 
 - Every host reads `skills/` through `~/.agents/skills`. Claude Code also reads it through `~/.claude/skills`, and `package.json` declares it for Pi.
 - Claude Code syncs each Claude account's skill library into `skills/synced/`, and the `~/.claude/skills` link puts those directories inside this checkout. `.gitignore` keeps them out of the repo.
 - A Pi Profile excludes the buckets another account synced, so one session loads one account's library. Claude Code has no skill filter and loads every bucket.
-- A **model-invoked** skill carries trigger phrases in its description, so the model enters it without being asked. 35 skills work this way.
+- A **model-invoked** skill carries trigger phrases in its description, so the model enters it without being asked. 27 skills work this way.
 - A **user-invoked** skill sets `disable-model-invocation: true`, so only a typed `/name` starts it. `deliver`, `wayfinder`, and `wait-what` work this way, because a long run should start only when you ask for it.
 - Shared skills use Claude Code notation: `/name`, `$ARGUMENTS`, `Agent`, and `SendMessage`. `AGENTS.md` maps each one to the equivalent on Codex and Pi.
 - A skill adapted from an upstream repo names its source, usually in a `> Source:` line. The copies drift from upstream on purpose, and re-syncing is manual.
 
 ## Orchestrators and disciplines
 
-An **orchestrator** runs other skills or personas in sequence: `build`, `deliver`, `drive-fleet`, `fix-issue`, `grill-with-docs`, and `wayfinder`. Every other skill is a **reusable discipline** that holds one practice, such as `test` or `debug`. An orchestrator calls disciplines, so a practice lives in one file. [CONTEXT.md](../CONTEXT.md#skill-model) defines both terms.
+An **orchestrator** runs other skills or personas in sequence: `build`, `deliver`, `drive-fleet`, `grill-with-docs`, and `wayfinder`. Every other skill is a **reusable discipline** that holds one practice, such as `debug` or `review-pr`. An orchestrator calls disciplines, so a practice lives in one file. [CONTEXT.md](../CONTEXT.md#skill-model) defines both terms.
 
 ## Catalog
 
@@ -28,22 +28,15 @@ Rows marked **user** start only when you type them.
 | `grill-with-docs` | model | Questions a plan one decision at a time and updates the `CONTEXT.md` glossary |
 | `spec` | model | Writes requirements with acceptance criteria, each with a `test`, `cmd`, or `manual` check |
 | `plan` | model | Turns an approved spec into vertical slices, each with its tests and verify command |
-| `to-issues` | model | Breaks a plan or spec into tracker issues |
 | `wayfinder` | **user** | Maps an effort too big for one session as decision tickets in a file |
-| `prototype` | model | Builds a throwaway prototype to settle one design question |
-| `improve-codebase-architecture` | model | Finds modules to deepen, informed by the glossary and past decisions |
 
 ### Build
 
 | Skill | Starts | Does |
 | --- | --- | --- |
-| `build` | model | Implements an approved plan with quality gates and a tests-first slice loop |
+| `build` | model | Implements an approved plan with quality gates and a tests-first slice loop; its `TESTING.md` owns standalone test writing |
 | `deliver` | **user** | Runs a feature from spec to a merge-ready PR with one human gate |
 | `drive-fleet` | model | Drives several PRs to done under `/goal`, with worktree subagents doing the edits |
-| `fix-issue` | model | Investigates and fixes a GitHub issue, from research to PR |
-| `test` | model | Writes tests first, or proves a bug with a failing test |
-| `constraints` | model | Writes `CONSTRAINTS.md`: a quality bar with a command behind each number |
-| `observability` | model | Adds logs, metrics, traces, and alerts before a feature ships |
 | `wizard` | model | Generates a bash wizard for steps only a human can do |
 
 ### Verify and ship
@@ -57,7 +50,6 @@ Rows marked **user** start only when you type them.
 | `review-pr` | model | Reviews a PR with severity-tagged findings |
 | `prune` | model | Reviews code only for over-engineering and lists what to delete |
 | `resolve-conflicts` | model | Resolves a merge or rebase conflict by recovering each side's intent |
-| `ship` | model | Runs the pre-launch checklist and release steps |
 
 ### Investigate
 

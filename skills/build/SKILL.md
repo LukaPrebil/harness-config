@@ -1,6 +1,6 @@
 ---
 name: build
-description: "Implements code incrementally with quality gates. Use when the user says 'build' or 'implement', or when starting the implementation phase of an approved plan."
+description: "Implements code incrementally with quality gates. Use when the user says 'build' or 'implement', when starting the implementation phase of an approved plan, or for standalone test writing: 'write tests', 'add tests', 'TDD', or 'prove-it pattern'."
 ---
 
 Implement the approved plan incrementally: $ARGUMENTS
@@ -13,6 +13,7 @@ Follow these disciplines:
 
 - Verify an approved plan exists (in `.claude/state/plans/` or the current conversation) `(review-time: see section note)`
 - If no plan exists, run `/plan` first. With no spec either, run `/spec` `(review-time: see section note)`
+- A standalone test-writing request follows [TESTING.md](TESTING.md); the slice loop's QA Expert uses the same seam and level guidance `(review-time: see section note)`
 - Read the plan and identify the task list `(review-time: see section note)`
 - Copy the task list to `.claude/state/runs/<branch-slug>/tasks.md` and tick each task as it finishes. Read that file, not memory, to resume after compaction `(review-time: see section note)`
 - If a spec drives the plan, set its `branch:` frontmatter to the current branch `(review-time: see section note)`

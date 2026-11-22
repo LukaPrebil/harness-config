@@ -14,20 +14,16 @@ For every skill with its kind and how it loads, see [skills](docs/skills.md). Fo
 | Hand over a whole feature: approve the spec, get a green PR | `/deliver <goal>` |
 | Stress-test a plan / reach alignment before code | `/grill-with-docs <topic>` |
 | Build the agreed plan | `/build` |
-| Write tests for code (TDD or prove-it) | `/test <target>` |
+| Write tests for code (TDD or prove-it) | `/build <target>` (test-writing mode) |
 | Investigate a prod incident with evidence-first hypothesis ranking | `/debug <error>` |
-| Resolve a GitHub issue end-to-end | `/fix-issue 1234` |
 | Review someone's PR | `/review-pr 567` |
 | Verify everything before pushing | `/verify-done` |
 | Open a PR/MR (reuses a verify pass at HEAD or runs the gate, regex-checks the title) | `/mr` |
 | Watch CI on the current branch | `/ci` (or `/loop 2m /ci` on Claude Code) |
 | Address reviewer comments on a PR (bots answered, humans drafted) | `/pr-comments` |
-| Cut a release | `/ship` |
 | Make a diagram (drawio) | `/diagram <topic>` |
 | Save the session's work as a diary entry | `/summarize` |
 | Refresh a library's API docs (React, Prisma, Next.js, etc.) | mention the library by name - the `ctx7` CLI auto-fires |
-| Break a plan/PRD into independently-grabbable tracker issues | `/to-issues` |
-| Find architectural deepening opportunities in a codebase | `/improve-codebase-architecture` |
 | Write or edit a skill | `/write-a-skill` |
 | Work on a task in its own worktree | `/worktree <slug>` |
 | Clean up a worktree after its branch merged | `/worktree-merge` |
@@ -36,7 +32,6 @@ For every skill with its kind and how it loads, see [skills](docs/skills.md). Fo
 | Drive several PRs to done in parallel | `/drive-fleet` |
 | Plan an effort too big for one session | `/wayfinder` |
 | Hand this session to a fresh one | `/handoff` |
-| Spike a throwaway prototype to settle a design question | `/prototype` |
 | Review code for over-engineering only | `/prune` |
 
 ## When the slash IS the value
@@ -45,13 +40,10 @@ Some skills enforce a discipline plain English would skip. Use the slash when yo
 
 - `/grill-with-docs` - the decision-tree walk is the point
 - `/debug` - evidence-first hypothesis ranking before any code change
-- `/build` - quality gates per task
-- `/test` - red-green-refactor or prove-it pattern
+- `/build` - quality gates per task; its TESTING.md owns standalone test writing
 - `/spec` - stakeholder-framed requirements doc
 - `/verify-done` - the repo's `npm run verify` when declared, otherwise every CI step in CI's exact order
 - `/mr` - verify pass at HEAD + commit-format + title-regex gates before opening
-- `/ship` - pre-launch validation checklist
-- `/fix-issue` - full issue resolution flow
 - `/review-pr` - severity-tagged review scaffolding
 
 ## Skills that fire on their own
@@ -98,8 +90,6 @@ These run independently of the implementation workflow:
 - `/resolve-conflicts` for an in-progress merge or rebase conflict
 - `/wizard` for human-only setup steps (credentials, CI secrets, dashboards)
 - `/wait-what` when the last reply did not land
-- `/observability` for instrumenting a feature before the incident
-- `/constraints` for a per-repo quality bar with ratchets
 
 ## Agents
 

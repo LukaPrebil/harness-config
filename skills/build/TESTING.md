@@ -1,7 +1,8 @@
----
-name: test
-description: "Writes tests using a TDD workflow. Use when the user says 'write tests', 'add tests', 'TDD', or 'prove-it pattern'."
----
+# Testing
+
+Build loads this for standalone test-writing requests ('write tests', 'add tests',
+'TDD', 'prove-it pattern') and for the slice loop's QA Expert. The subject is
+whatever the request or slice names.
 
 Write tests for: $ARGUMENTS
 

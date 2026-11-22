@@ -1,6 +1,6 @@
 # Security Checklist
 
-Reusable security checklist mapped to the [OWASP Top 10:2025](https://top10.owasp.org/2025). Referenced by the ship skill and the PR Reviewer agent.
+Reusable security checklist mapped to the [OWASP Top 10:2025](https://top10.owasp.org/2025). Referenced by the PR Reviewer agent.
 
 ## Input Validation (OWASP A05: Injection)
 

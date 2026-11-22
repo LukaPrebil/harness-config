@@ -31,6 +31,11 @@ make_repo() {
   local dir="$TEST_ROOT/$1"
   mkdir -p "$dir"
   git -C "$dir" init -q -b main
+  # CI runners carry no global git identity; without this the commit fails
+  # and every later push dies on a missing main refspec.
+  git -C "$dir" config user.email t@t
+  git -C "$dir" config user.name t
+  git -C "$dir" config commit.gpgsign false
   git -C "$dir" config user.email t@t
   git -C "$dir" config user.name t
   echo base > "$dir/file.txt"

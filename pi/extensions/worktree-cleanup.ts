@@ -88,9 +88,9 @@ export default async function (pi: ExtensionAPI) {
     if (convPath === undefined) return; // hook parity: [ -x ... ] || exit 0
 
     try {
-      /* The converge pass may fetch and, on a dirty tree, run the stash
-       * summarizer (capped at 20s inside), so it gets its own budget. */
-      execFileSync('bash', [convPath, ctx.cwd], { timeout: 45_000, stdio: 'ignore' });
+      /* The converge pass runs in --fast mode: no LLM summarizer and a
+       * capped fetch, so teardown stays bounded even on a slow remote. */
+      execFileSync('bash', [convPath, '--fast', ctx.cwd], { timeout: 45_000, stdio: 'ignore' });
     } catch {
       // Advisory only: convergence failures never block shutdown (hook parity).
     }

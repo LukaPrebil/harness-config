@@ -131,6 +131,22 @@ else
   fail "a failed summarizer falls back to the diffstat"
 fi
 
+# --fast skips the summarizer entirely and names the stash from the diffstat.
+REPO=$(make_repo fast-mode)
+git -C "$REPO" checkout -qb feature/x
+echo wip >> "$REPO/file.txt"
+advance_origin "$REPO" second
+OUT=$(CHECKOUT_CONVERGE_SUMMARIZER="$SUMMARIZER" \
+  bash "$PROJECT_DIR/scripts/checkout-converge.sh" --fast "$REPO" 2>&1)
+STASHES=$(git -C "$REPO" stash list)
+if says "$STASHES" "wip(feature/x): 1 file changed" \
+  && ! says "$STASHES" "stub summary" && branch_is "$REPO" main; then
+  pass "--fast skips the summarizer and uses the diffstat name"
+else
+  echo "    got: $OUT" >&2; echo "    stash: $STASHES" >&2
+  fail "--fast skips the summarizer and uses the diffstat name"
+fi
+
 # A broken remote URL still converges against the local tracking ref.
 REPO=$(make_repo offline)
 advance_origin "$REPO" second
@@ -187,6 +203,34 @@ if says "$STASHES" "wip(feature/wt): stub summary" && branch_is "$REPO" main \
 else
   echo "    got: $OUT" >&2; echo "    stash: $STASHES" >&2
   fail "a worktree argument converges the main checkout"
+fi
+
+# A detached HEAD is pinned to a named branch before the checkout moves.
+REPO=$(make_repo detached)
+git -C "$REPO" checkout -qb feature/x
+echo detach > "$REPO/detached.txt"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm "feat: detached work"
+DETACHED_SHA=$(git -C "$REPO" rev-parse --short HEAD)
+git -C "$REPO" checkout -q --detach
+OUT=$(run_conv "$REPO")
+if says "$OUT" "preserved on branch converge-detached/" && branch_is "$REPO" main \
+  && git -C "$REPO" rev-parse --verify --quiet "converge-detached/${DETACHED_SHA}" >/dev/null 2>&1; then
+  pass "a detached checkout is pinned to a branch before converging"
+else
+  echo "    got: $OUT" >&2
+  fail "a detached checkout is pinned to a branch before converging"
+fi
+
+# origin/HEAD resolution takes the primary documented path when set.
+REPO=$(make_repo origin-head)
+git -C "$REPO" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+git -C "$REPO" checkout -qb feature/x
+advance_origin "$REPO" second
+OUT=$(run_conv "$REPO")
+if branch_is "$REPO" main && head_is "$REPO" origin/main; then
+  pass "an origin/HEAD fixture converges through the primary path"
+else
+  echo "    got: $OUT" >&2; fail "an origin/HEAD fixture converges through the primary path"
 fi
 
 echo ""

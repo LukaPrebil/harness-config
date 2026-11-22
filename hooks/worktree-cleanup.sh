@@ -28,5 +28,5 @@ git -C "$PWD" rev-parse --show-toplevel >/dev/null 2>&1 || exit 0
 # The stash message is the durable note a later session reads.
 CONV="$CLAUDE_PROJECT_DIR/scripts/checkout-converge.sh"
 [ -x "$CONV" ] || CONV="$HOME/.claude/scripts/checkout-converge.sh"
-[ -x "$CONV" ] && "$CONV" "$PWD" >/dev/null 2>&1 || true
+[ -x "$CONV" ] && "$CONV" --fast "$PWD" >/dev/null 2>&1 || true
 exit 0

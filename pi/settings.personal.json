@@ -27,7 +27,72 @@
   "subagents": {
     "defaultSubagentOnlyExtensions": [
       "~/.pi-personal/agent/extensions/hook-bridge.ts"
-    ]
+    ],
+    "agentOverrides": {
+      "PR Reviewer": {
+        "tools": [
+          "read",
+          "grep",
+          "find",
+          "bash",
+          "web_search",
+          "fetch_content"
+        ]
+      },
+      "Spec Verifier": {
+        "tools": [
+          "read",
+          "grep",
+          "find",
+          "bash"
+        ]
+      },
+      "Cybersecurity Expert": {
+        "tools": [
+          "read",
+          "grep",
+          "find",
+          "bash",
+          "web_search",
+          "fetch_content"
+        ]
+      },
+      "GDPR Expert": {
+        "tools": [
+          "read",
+          "grep",
+          "find",
+          "bash",
+          "web_search",
+          "fetch_content"
+        ]
+      },
+      "Product Manager": {
+        "tools": [
+          "read",
+          "grep",
+          "find",
+          "bash",
+          "web_search",
+          "fetch_content"
+        ]
+      },
+      "UX Expert": {
+        "tools": [
+          "read",
+          "grep",
+          "find",
+          "bash",
+          "web_search",
+          "fetch_content"
+        ]
+      },
+      "Doc Reader": {
+        "tools": [
+          "read"
+        ]
+      }
+    }
   },
   "defaultTools": [
     "+codemode"

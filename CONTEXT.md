@@ -117,7 +117,7 @@ Another Pi session on this machine, addressable directly for coordination; exist
 _Avoid_: "subagent", "teammate" for cross-session peers.
 
 **Advisory persona**:
-A persona whose frontmatter `tools` list excludes Edit/Write/NotebookEdit, so mutating a file takes a deliberate shell command rather than one tool call (PR Reviewer, Spec Verifier, Cybersecurity Expert, GDPR Expert, Product Manager, UX Expert). These personas keep Bash, which they need for `git diff` and `gh`, so the brief still carries the read-only instruction.
+A persona whose frontmatter `tools` list excludes Edit/Write/NotebookEdit, so mutating a file takes a deliberate shell command rather than one tool call (PR Reviewer, Spec Verifier, Cybersecurity Expert, GDPR Expert, Product Manager, UX Expert). These personas keep Bash, which they need for `git diff` and `gh`, so the brief still carries the read-only instruction. Pi consumes the same intent through `agentOverrides` in its settings, because pi-subagents reads `tools:` as a strict allowlist and does not know Claude's tool names.
 _Avoid_: "read-only agent", "reviewer agent", "mechanically read-only" - Bash makes the guarantee partial.
 
 **Writer persona**:

@@ -31,17 +31,16 @@ make_repo() {
   local dir="$TEST_ROOT/$1"
   mkdir -p "$dir"
   git -C "$dir" init -q -b main
-  # CI runners carry no global git identity; without this the commit fails
-  # and every later push dies on a missing main refspec.
   git -C "$dir" config user.email t@t
   git -C "$dir" config user.name t
   git -C "$dir" config commit.gpgsign false
-  git -C "$dir" config user.email t@t
-  git -C "$dir" config user.name t
   echo base > "$dir/file.txt"
   git -C "$dir" add -A
   git -C "$dir" commit -qm base
-  git -C "$dir" init -q --bare "$dir-origin.git"
+  # The bare's HEAD must point at main: a bare defaulting to master makes
+  # every clone of it warn and land on master, so the advancer's push of
+  # main dies on a missing refspec.
+  git -C "$dir" init -q -b main --bare "$dir-origin.git"
   git -C "$dir" remote add origin "$dir-origin.git"
   git -C "$dir" push -q origin main
   echo "$dir"
@@ -52,7 +51,10 @@ make_repo() {
 advance_origin() {
   local dir="$1" content="$2" clone
   clone="$dir-advancer"
-  git clone -q "$dir-origin.git" "$clone"
+  # A clone of an empty bare falls back to the runner's default branch name,
+  # which is master on CI and main on some laptops; pin it so the advancer
+  # commits and pushes the branch the fixtures expect.
+  git -c init.defaultBranch=main clone -q "$dir-origin.git" "$clone"
   git -C "$clone" config user.email t@t
   git -C "$clone" config user.name t
   echo "$content" > "$clone/file.txt"

@@ -16,15 +16,17 @@ const PI_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'pi');
 
 /**
  * Keys that legitimately differ per Profile: the startup identity trio, plus
- * lastChangelogVersion, which pi writes back per Profile at runtime. `skills`
- * differs because each Profile loads only its own account's skill-sync
- * buckets; the exclusions are checked separately below.
+ * lastChangelogVersion and extensionChangelogVersions, which pi writes back
+ * per Profile at runtime. `skills` differs because each Profile loads only
+ * its own account's skill-sync buckets; the exclusions are checked separately
+ * below.
  */
 const PER_PROFILE_KEYS = [
   'defaultProvider',
   'defaultModel',
   'defaultThinkingLevel',
   'lastChangelogVersion',
+  'extensionChangelogVersions',
   'skills',
 ] as const;
 

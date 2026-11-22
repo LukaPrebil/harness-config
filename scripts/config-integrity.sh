@@ -17,7 +17,7 @@ cd "$ROOT"
 
 # Keys the strip filter deletes. Keep in step with the filter command in
 # README.md; this check is what catches a clone that never configured it.
-EPHEMERAL_KEYS=(feedbackSurveyState lastChangelogVersion autoMode)
+EPHEMERAL_KEYS=(feedbackSurveyState lastChangelogVersion autoMode extensionChangelogVersions)
 FILTERED_FILES=(settings.json pi/settings.work.json pi/settings.personal.json)
 
 fail=0
@@ -59,7 +59,7 @@ PY
     printf '  BAD  %s carries %s\n' "$f" "$found"
     note_fail "$f carries ephemeral key(s): $found."
     echo "      Configure the strip filter in this clone, then re-stage the file:" >&2
-    echo "      git config filter.strip-ephemeral-state.clean 'jq \"del(.feedbackSurveyState, .lastChangelogVersion, .autoMode)\" 2>/dev/null || cat'" >&2
+    echo "      git config filter.strip-ephemeral-state.clean 'jq \"del(.feedbackSurveyState, .lastChangelogVersion, .autoMode, .extensionChangelogVersions)\" 2>/dev/null || cat'" >&2
     echo "      git config filter.strip-ephemeral-state.smudge cat" >&2
   else
     printf '  ok   %s\n' "$f"

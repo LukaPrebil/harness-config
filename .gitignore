@@ -23,3 +23,5 @@ node_modules/
 # Skills Claude Code syncs from the claude.ai account. ~/.claude/skills links
 # to skills/, so the sync writes into the checkout.
 skills/synced/
+# Synced skills the account deleted land here before disappearing.
+skills/.trash/

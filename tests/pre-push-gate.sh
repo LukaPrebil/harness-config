@@ -192,7 +192,7 @@ echo "== package manager =="
 BIN="$TEST_ROOT/bin"
 STUB_LOG="$TEST_ROOT/stub.log"
 mkdir -p "$BIN"
-for TOOL in bash cat dirname git grep head jq ls node sed tail; do
+for TOOL in bash cat dirname git grep head jq ls node sed tail mktemp tar rm; do
   TOOL_PATH=$(command -v "$TOOL") || { echo "Missing required tool: $TOOL" >&2; exit 1; }
   ln -s "$TOOL_PATH" "$BIN/$TOOL"
 done
@@ -338,6 +338,157 @@ check "Yarn Berry audits every workspace and transitive dep" \
 
 STUB_VERSION=4.5.0 STUB_AUDIT_EXIT=1 run_pm_gate "$REPO"
 check "a failing Yarn Berry audit blocks" exited 2
+
+echo ""
+echo "== dependency audit =="
+
+# These cases need commits and a merge-base, so each repo gets a bare origin,
+# a base commit on main, and a feature branch. The stub audit fails only
+# where the tree carries an audit-fail marker, so a tree's audit result
+# follows its committed content.
+make_audit_stub() {
+  cat > "$BIN/npm" <<'STUB'
+#!/bin/bash
+echo "npm $*" >> "$STUB_LOG"
+case " $* " in
+  *" --version "*) echo "1.0.0" ;;
+  *" audit "*)
+    [ -f audit-fail ] && exit 1
+    [ -f audit-loud ] && { echo "3 vulnerabilities (1 critical) found"; exit 1; }
+    ;;
+esac
+exit 0
+STUB
+  chmod +x "$BIN/npm"
+}
+make_audit_stub
+
+seed_audit_repo() {
+  local dir="$1"
+  mkdir -p "$dir/node_modules"
+  git -C "$dir" init -q -b main
+  git -C "$dir" config user.email t@t
+  git -C "$dir" config user.name t
+  git -C "$dir" config commit.gpgsign false
+  printf '%s\n' '{"scripts":{"build":"x"}}' > "$dir/package.json"
+  : > "$dir/package-lock.json"
+  git -C "$dir" add -A
+  git -C "$dir" commit -qm base
+  git -C "$dir" init -q --bare "$dir-origin.git"
+  git -C "$dir" remote add origin "$dir-origin.git"
+  echo "$dir"
+}
+
+push_base_and_branch() {
+  git -C "$1" push -q origin main
+  git -C "$1" checkout -qb feature/x
+}
+
+never_ran_audit() { ! grep -q -- '^npm audit' "$STUB_LOG"; }
+audit_runs() { [ "$(grep -c -- '^npm audit' "$STUB_LOG")" = "$1" ]; }
+tmp_audit_dirs() { ls -d "${TMPDIR:-/tmp}"/pre-push-audit.* 2>/dev/null | wc -l | tr -d ' '; }
+
+REPO=$(seed_audit_repo "$TEST_ROOT/audit-unchanged")
+push_base_and_branch "$REPO"
+echo x > "$REPO/src.ts"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm "feat: src only"
+run_pm_gate "$REPO"
+check "an unchanged dependency set skips the audit" exited 0
+check "the skip says so" says "audit skipped: no dependency file changed"
+check "no audit ran" never_ran_audit
+
+REPO=$(seed_audit_repo "$TEST_ROOT/audit-inherited")
+: > "$REPO/audit-loud"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm "chore: marker on main"
+push_base_and_branch "$REPO"
+echo x >> "$REPO/package-lock.json"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm "chore: bump dep"
+BEFORE_TMP=$(tmp_audit_dirs)
+run_pm_gate "$REPO"
+check "an inherited critical passes the gate" exited 0
+check "the inherited notice names the merge-base" says "inherited, not new"
+check "both the branch and the merge-base were audited" audit_runs 2
+check "no extraction temp dirs leaked" test "$(tmp_audit_dirs)" = "$BEFORE_TMP"
+
+REPO=$(seed_audit_repo "$TEST_ROOT/audit-new-finding")
+push_base_and_branch "$REPO"
+: > "$REPO/audit-loud"
+echo x >> "$REPO/package-lock.json"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm "chore: bump dep, add marker"
+BEFORE_TMP=$(tmp_audit_dirs)
+run_pm_gate "$REPO"
+check "a critical the merge-base lacks blocks" exited 2
+check "the block names the new finding" says "the merge-base does not carry"
+check "both the branch and the merge-base were audited" audit_runs 2
+check "a blocking run leaks no extraction temp dirs" test "$(tmp_audit_dirs)" = "$BEFORE_TMP"
+
+REPO=$(seed_audit_repo "$TEST_ROOT/audit-new-lockfile")
+rm "$REPO/package-lock.json"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm "chore: drop lockfile"
+push_base_and_branch "$REPO"
+: > "$REPO/package-lock.json"
+: > "$REPO/audit-loud"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm "chore: add lockfile"
+run_pm_gate "$REPO"
+check "a newly introduced lockfile has no baseline" exited 2
+check "the block names the missing lockfile" says "merge-base lacks the npm lockfile"
+check "only the branch was audited" audit_runs 1
+
+REPO=$(seed_audit_repo "$TEST_ROOT/audit-nested-manifest")
+push_base_and_branch "$REPO"
+mkdir -p "$REPO/packages/foo"
+printf '%s\n' '{"name":"foo"}' > "$REPO/packages/foo/package.json"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm "feat: workspace manifest"
+run_pm_gate "$REPO"
+check "a nested workspace manifest triggers the audit" exited 0
+check "the audit ran once" audit_runs 1
+
+REPO=$(seed_audit_repo "$TEST_ROOT/audit-branch-inconclusive")
+push_base_and_branch "$REPO"
+: > "$REPO/audit-fail"
+echo x >> "$REPO/package-lock.json"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm "chore: silent audit failure"
+run_pm_gate "$REPO"
+check "a failed audit without a findings report blocks" exited 2
+check "the block says the comparison cannot run" says "without a findings report"
+check "the merge-base was never audited" audit_runs 1
+
+REPO=$(seed_audit_repo "$TEST_ROOT/audit-base-inconclusive")
+: > "$REPO/audit-fail"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm "chore: silent failure on main"
+push_base_and_branch "$REPO"
+rm "$REPO/audit-fail"
+: > "$REPO/audit-loud"
+echo x >> "$REPO/package-lock.json"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm "chore: loud failure, dep change"
+run_pm_gate "$REPO"
+check "a baseline without a findings report blocks" exited 2
+check "the block says the comparison is inconclusive" says "inconclusive"
+check "both trees were audited" audit_runs 2
+
+REPO=$(seed_audit_repo "$TEST_ROOT/audit-no-base")
+push_base_and_branch "$REPO"
+: > "$REPO/audit-loud"
+echo x >> "$REPO/package-lock.json"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm "chore: dep change"
+rm -rf "$REPO-origin.git"
+git -C "$REPO" remote remove origin
+run_pm_gate "$REPO"
+check "no merge base falls back to a plain block" exited 2
+check "the block names the missing merge-base" says "no merge-base is available"
+check "only the branch was audited" audit_runs 1
+
+REPO=$(seed_audit_repo "$TEST_ROOT/audit-extraction-fails")
+push_base_and_branch "$REPO"
+: > "$REPO/audit-loud"
+echo x >> "$REPO/package-lock.json"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm "chore: dep change"
+rm "$BIN/tar"
+run_pm_gate "$REPO"
+check "a failed extraction blocks the push" exited 2
+check "the block names the extraction failure" says "could not be extracted"
+check "no audit ran" never_ran_audit
+ln -s "$(command -v tar)" "$BIN/tar"
 
 echo ""
 echo "$PASSED passed; $FAILED failed"

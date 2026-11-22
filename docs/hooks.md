@@ -55,7 +55,7 @@ These run before the tool call and can block it. The rows follow registry order,
 | `pre-git-state-refresh.sh` | `git push`, `git commit`, and `gh pr` `edit`, `comment`, `merge`, `close`, `ready`, `review`; not `gh pr create` | Never. It adds a `[pr-state]` line with the branch's PR state | `SKIP_PR_STATE_REFRESH` |
 | `pre-pr-test-gate.sh` | `gh pr create`, `gh pr ready` | The title is not conventional, or HEAD has no passing verify run | `SKIP_PR_TEST_GATE` |
 | `pre-pr-evidence-gate.sh` | `gh pr create`, when a spec names the branch | A non-manual acceptance criterion lacks a PASS row at HEAD | `SKIP_EVIDENCE_GATE` |
-| `pre-push-gate.sh` | `git push`, including `git -C <dir> push` | A repo check fails, the package manager or `node_modules` is missing, or `core.hooksPath` names a missing dir. See below | `SKIP_PUSH_GATE` |
+| `pre-push-gate.sh` | `git push`, including `git -C <dir> push` | A repo check fails, the package manager or `node_modules` is missing, `core.hooksPath` names a missing dir, or a changed dependency set grows a new critical audit finding. See below | `SKIP_PUSH_GATE` |
 | `pre-commit-branch-gate.sh` | `git commit`, including `git -C <dir> commit` | The branch is `main` or `master` | `SKIP_COMMIT_BRANCH_GATE` |
 | `pre-commit-coauthor-gate.sh` | `git commit` | The command contains a `Co-authored-by` trailer | `SKIP_COAUTHOR_GATE` |
 | `pre-commit-conventional-gate.sh` | `git commit` | The subject is not a conventional commit | `SKIP_CONVENTIONAL_GATE` |
@@ -68,7 +68,7 @@ The conventional and co-author gates read the message from the command. A messag
 
 Two gates defer to the repo they run in:
 
-- `pre-push-gate.sh` steps aside when the repo has its own executable pre-push hook, and runs `verify:fast` when `package.json` declares it. Otherwise it runs each of `lint`, `typecheck`, `knip`, `test`, and `build` that `package.json` declares, then a critical-only audit. In a Node repo it blocks when the detected npm, pnpm, or yarn is not on `PATH`. In a Terraform dir it runs `terraform fmt -check` and `terraform validate`, and passes when `terraform` is not installed. A dir with neither `package.json` nor `.tf` files passes.
+- `pre-push-gate.sh` steps aside when the repo has its own executable pre-push hook, and runs `verify:fast` when `package.json` declares it. Otherwise it runs each of `lint`, `typecheck`, `knip`, `test`, and `build` that `package.json` declares, then a critical-only **Dependency audit**. The audit runs only when the pushed diff changes a `package.json` or a lockfile, and a failing audit blocks only when the merge-base passes the same audit, so an inherited critical pushes with a notice instead of blocking. An audit that fails without a findings report (tool or network failure) blocks as inconclusive. A branch that introduces the lockfile has no baseline, so its findings count as new. In a Node repo it blocks when the detected npm, pnpm, or yarn is not on `PATH`. In a Terraform dir it runs `terraform fmt -check` and `terraform validate`, and passes when `terraform` is not installed. A dir with neither `package.json` nor `.tf` files passes.
 - `pre-pr-test-gate.sh` reads the `verify-passed` stamp that the repo's `npm run verify` writes to the git dir. It runs `npm test` only in repos without `verify`.
 
 ## PostToolUse hooks
@@ -93,7 +93,7 @@ The prose gate also prints advisories that never block: words to reconsider, sen
 | `SessionStart`, after compaction | Inline `echo` | Reminds the model of the workflow, `/verify-done` before a PR, and the current year |
 | `SessionStart` | `herdr-agent-state.sh` | Reports the session to herdr when `HERDR_ENV=1`. herdr manages this file and overwrites it on reinstall |
 | `SessionStart`, `CwdChanged`, `Stop` | `herdr-pane-context.sh` | Reports `$repo`, `$branch`, and `$wt` pane tokens to the herdr sidebar when `HERDR_ENV=1`. On `SessionStart` it also reports `$model`, because only that event carries the model. It also sets one of `$c0` to `$c13`, a color marker that the herdr config styles. Each new repo in a space takes the lowest unused color, saved in `~/.local/state/herdr/repo-colors`. `Stop` catches a branch switch inside a session. The agent panel keeps herdr's own `ui.agent_panel_sort` policy. Claude Code only |
-| `SessionEnd` | `worktree-cleanup.sh` | Runs `scripts/worktree-prune.sh --apply`; `CLAUDE_DISABLE_WORKTREE_CLEANUP=1` turns it off. Pi's `worktree-cleanup` extension also reads `HARNESS_DISABLE_WORKTREE_CLEANUP=1` |
+| `SessionEnd` | `worktree-cleanup.sh` | Runs `scripts/worktree-prune.sh --apply`, then `scripts/checkout-converge.sh` on the session repo; `CLAUDE_DISABLE_WORKTREE_CLEANUP=1` turns both off. Pi's `worktree-cleanup` extension does the same and reads `HARNESS_DISABLE_WORKTREE_CLEANUP=1` |
 | `Notification` | Inline `osascript` | Shows a macOS notification on a permission or idle prompt |
 
 ## Bypass variables

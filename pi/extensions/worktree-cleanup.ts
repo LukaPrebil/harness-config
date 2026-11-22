@@ -8,8 +8,11 @@
  * locked worktrees ride inside its safety verdicts, uncertain entries stay.
  *
  * Fully silent by design: the prune is advisory, shutdown-time UI does not
- * render, and scripted pi runs must not gain prune chatter. Dry-run
- * visibility lives in the script itself (`worktree-prune.sh` without
+ * render, and scripted pi runs must not gain prune chatter. The same pass
+ * then converges the repo's main checkout to the latest default branch
+ * (scripts/checkout-converge.sh): fast-forward when behind, check out the
+ * default when the tree is clean, stash-with-named-message when dirty. Dry-run
+ * visibility lives in the scripts themselves (`worktree-prune.sh` without
  * --apply) and the worktrees skill. Disable per-session with
  * HARNESS_DISABLE_WORKTREE_CLEANUP=1, or the legacy CLAUDE_ spelling.
  *
@@ -75,6 +78,21 @@ export default async function (pi: ExtensionAPI) {
       execFileSync('bash', [scriptPath, '--apply', '--repo', ctx.cwd], { timeout: 30_000, stdio: 'ignore' });
     } catch {
       // Advisory only: prune failures never block shutdown (hook parity).
+    }
+
+    const convCandidates = [
+      join(moduleDir, '../../scripts/checkout-converge.sh'),
+      join(getAgentDir(), 'scripts/checkout-converge.sh'),
+    ];
+    const convPath = convCandidates.find((candidate) => existsSync(candidate));
+    if (convPath === undefined) return; // hook parity: [ -x ... ] || exit 0
+
+    try {
+      /* The converge pass runs in --fast mode: no LLM summarizer and a
+       * capped fetch, so teardown stays bounded even on a slow remote. */
+      execFileSync('bash', [convPath, '--fast', ctx.cwd], { timeout: 45_000, stdio: 'ignore' });
+    } catch {
+      // Advisory only: convergence failures never block shutdown (hook parity).
     }
   });
 }

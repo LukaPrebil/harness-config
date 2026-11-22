@@ -162,10 +162,10 @@ export function resolveDispatcherPath(moduleUrl: string): string {
   return join(moduleDir, '../../hooks/lib/dispatch.sh');
 }
 
-/* Above the largest per-hook timeout in settings.json (pre-push-gate, 300s), so the
+/* Above the largest per-hook timeout in settings.json (pre-push-gate, 600s), so the
  * dispatcher's own per-hook bound fires first and a slow push gate is not cut
  * off into a fail-open by this outer bound. */
-export const DISPATCH_TIMEOUT_MS = 330_000;
+export const DISPATCH_TIMEOUT_MS = 630_000;
 const MAX_CAPTURE_BYTES = 1024 * 1024;
 
 /** Run the dispatcher with the payload on stdin; never rejects. */

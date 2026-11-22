@@ -196,6 +196,10 @@ _Avoid_: "the lint hook", "the style check".
 The half of the writing policy no regex can check: forced triads, synonym cycling, sentences naming a feeling instead of a mechanism. Lives in the `write-plain` skill, so it triggers on prose work rather than loading every session.
 _Avoid_: "soft rules", "style guide".
 
+**Dependency audit**:
+The pre-push vulnerability check for changed dependency manifests or lockfiles; a failing branch audit blocks only when its merge-base audit lacks the same critical finding.
+_Avoid_: "push audit", "audit every push".
+
 ## Relationships
 
 - Each **Agent host** loads the **Shared instruction source** through its **Host adapter**.
@@ -224,6 +228,7 @@ _Avoid_: "soft rules", "style guide".
 - An **Advisory persona** can join **Panel mode** only; a **Lane mode** teammate must be a **Writer persona**.
 - An **Always-loaded rule** competes for attention in every session; an **On-demand rule** does not. A rule with a mechanical trigger (file path or unambiguous phrase) belongs on demand.
 - The **Prose gate** and the **Judgment tier** split one policy by what a regex can see. A pattern that fires on correct usage belongs in the **Judgment tier**, not the gate.
+- A **Dependency audit** skips a push with unchanged dependencies and compares a failing dependency change against its merge-base, so inherited critical findings pass and new ones block.
 - The distinguishing axis is coordination topology: **Lane mode** is a star (teammates report only to the parent), **Panel mode** is a mesh (teammates also message each other). Worktree isolation follows from this: lanes mutate files so they need worktrees, panels are read-only so they do not.
 
 ## Example dialogue

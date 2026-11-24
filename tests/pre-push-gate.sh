@@ -340,6 +340,61 @@ STUB_VERSION=4.5.0 STUB_AUDIT_EXIT=1 run_pm_gate "$REPO"
 check "a failing Yarn Berry audit blocks" exited 2
 
 echo ""
+echo "== .nvmrc Node =="
+
+# A fake nvm whose resolver knows one installed version. Its node logs a
+# marker and runs the real node, so a logged marker proves the gate put the
+# pinned Node first on PATH.
+FAKE_NVM="$TEST_ROOT/nvm"
+REAL_NODE=$(command -v node)
+mkdir -p "$FAKE_NVM/versions/node/v24.1.0/bin"
+cat > "$FAKE_NVM/nvm.sh" <<'NVM'
+nvm_version() {
+  case "$1" in
+    24|v24.1.0) echo v24.1.0 ;;
+    *) echo N/A; return 3 ;;
+  esac
+}
+NVM
+printf '#!/bin/bash\necho "nvm-node" >> "$STUB_LOG"\nexec "%s" "$@"\n' "$REAL_NODE" \
+  > "$FAKE_NVM/versions/node/v24.1.0/bin/node"
+chmod +x "$FAKE_NVM/versions/node/v24.1.0/bin/node"
+used_nvm_node() { grep -qx nvm-node "$STUB_LOG"; }
+skipped_nvm_node() { ! used_nvm_node; }
+
+REPO=$(pm_project nvmrc-installed)
+: > "$REPO/package-lock.json"
+printf '24 # pinned\n' > "$REPO/.nvmrc"
+NVM_DIR="$FAKE_NVM" run_pm_gate "$REPO"
+check "an installed .nvmrc version passes" exited 0
+check "the checks run on the .nvmrc Node" used_nvm_node
+
+mkdir -p "$REPO/packages/app/node_modules"
+echo '{"scripts":{"build":"x"}}' > "$REPO/packages/app/package.json"
+NVM_DIR="$FAKE_NVM" run_pm_gate "$REPO/packages/app"
+check "a workspace package finds the root .nvmrc" used_nvm_node
+
+REPO=$(pm_project nvmrc-missing)
+: > "$REPO/package-lock.json"
+echo 22 > "$REPO/.nvmrc"
+NVM_DIR="$FAKE_NVM" run_pm_gate "$REPO"
+check "an uninstalled .nvmrc version blocks" exited 2
+check "the block names the nvm install" says "Run 'nvm install 22'"
+check "no check runs before the install" never_ran npm
+
+REPO=$(pm_project nvmrc-no-nvm)
+: > "$REPO/package-lock.json"
+echo 24 > "$REPO/.nvmrc"
+NVM_DIR="$TEST_ROOT/no-nvm" run_pm_gate "$REPO"
+check "an .nvmrc without nvm keeps the PATH Node" exited 0
+check "no nvm means no nvm Node" skipped_nvm_node
+
+REPO=$(pm_project no-nvmrc)
+: > "$REPO/package-lock.json"
+NVM_DIR="$FAKE_NVM" run_pm_gate "$REPO"
+check "a repo without .nvmrc keeps the PATH Node" skipped_nvm_node
+
+echo ""
 echo "== dependency audit =="
 
 # These cases need commits and a merge-base, so each repo gets a bare origin,

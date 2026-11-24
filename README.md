@@ -51,6 +51,10 @@ This repo is a fork of [`domengabrovsek/agent-config`](https://github.com/domeng
 
 For Codex, the bootstrap adds the shared-instruction fallback and a built-in TUI status line only when each setting is absent. It preserves an existing custom status line.
 
+### Claude Code
+
+`settings.json` sets `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`, turning on [Code Mode](https://code.claude.com/docs/en/code-mode). Claude then runs tool calls from JavaScript in the `REPL` tool, mirroring Pi's codemode. Calls inside the code still pass through the deny rules and `PreToolUse` hooks under their usual names. Claude Code reads the variable only from user settings, so the link at `~/.claude/settings.json` carries it. Code Mode sessions resume only with the variable still set to `1`.
+
 ### Pi
 
 Install Pi separately from the host configuration, with the [pi.dev installer](https://pi.dev). This machine runs a managed install, and [Pi install layout](docs/pi-install.md) records where it puts things.

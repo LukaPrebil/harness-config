@@ -5,7 +5,8 @@
 # Order: a repo whose hooks directory is missing blocks, a repo with its own
 # pre-push hook gates itself, a repo declaring `verify:fast` runs only that,
 # and any other repo gets the guessed lint/typecheck/knip/test/build/audit run.
-# Node checks run through the repo's own package manager.
+# Node checks run through the repo's own package manager, on the nvm Node
+# that the repo's .nvmrc pins.
 # Exit code 2 blocks the action and sends the error message to Claude.
 # Bypass with SKIP_PUSH_GATE=1, in the environment or inline in the command.
 
@@ -33,6 +34,37 @@ detect_package_manager() {
     dir=$(dirname "$dir")
   done
   echo npm
+}
+
+# nvmrc_node_bin <dir>: print the bin dir of the nvm Node that the nearest
+# .nvmrc names, walking up to the git top level. Prints nothing when there is
+# no .nvmrc or no nvm. Fails, printing the wanted version, when nvm cannot
+# resolve it to an installed one. Hooks inherit the agent's PATH, which holds
+# no nvm Node when the interactive shell lazy-loads nvm.
+nvmrc_node_bin() {
+  local dir top nvm_dir line want="" ver
+  dir=$(cd "$1" && pwd -P)
+  top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || echo "$dir")
+  while [ ! -f "$dir/.nvmrc" ]; do
+    if [ "$dir" = "$top" ] || [ "$dir" = "/" ]; then return 0; fi
+    dir=$(dirname "$dir")
+  done
+  nvm_dir="${NVM_DIR:-$HOME/.nvm}"
+  [ -f "$nvm_dir/nvm.sh" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%%#*}
+    line=${line//[[:space:]]/}
+    [ -n "$line" ] && { want=$line; break; }
+  done < "$dir/.nvmrc"
+  [ -n "$want" ] || return 0
+  # A subshell keeps nvm's functions and variables out of the gate.
+  # shellcheck source=/dev/null
+  ver=$(export NVM_DIR="$nvm_dir"; . "$nvm_dir/nvm.sh" --no-use >/dev/null 2>&1; nvm_version "$want" 2>/dev/null)
+  if [ -z "$ver" ] || [ ! -x "$nvm_dir/versions/node/$ver/bin/node" ]; then
+    printf '%s\n' "$want"
+    return 1
+  fi
+  printf '%s\n' "$nvm_dir/versions/node/$ver/bin"
 }
 
 # install_cmd <manager>: the command that creates node_modules.
@@ -219,6 +251,14 @@ run_step() {
 }
 
 if [ "$PROJECT_TYPE" = "node" ]; then
+  # Checks on a Node other than the one CI pins mislead: native modules fail
+  # to build, and newer syntax passes where the pinned Node rejects it.
+  if NODE_BIN=$(nvmrc_node_bin "$PROJECT_ROOT"); then
+    [ -n "$NODE_BIN" ] && PATH="$NODE_BIN:$PATH"
+  else
+    echo "[pre-push-gate] .nvmrc pins Node $NODE_BIN, which nvm has not installed. Run 'nvm install $NODE_BIN', then push again (or bypass with SKIP_PUSH_GATE=1)." >&2
+    exit 2
+  fi
   PM=$(detect_package_manager "$PROJECT_ROOT")
   if ! command -v "$PM" >/dev/null 2>&1; then
     echo "[pre-push-gate] $PROJECT_ROOT uses $PM, which is not on PATH. Install it or enable corepack (or bypass with SKIP_PUSH_GATE=1)." >&2

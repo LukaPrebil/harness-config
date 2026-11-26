@@ -2,7 +2,7 @@
   "mcpServers": {
     "drawio": {
       "command": "npx",
-      "args": ["-y", "@drawio/mcp"]
+      "args": ["-y", "@drawio/mcp@1.13.1"]
     }
   }
 }

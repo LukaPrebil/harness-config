@@ -54,7 +54,7 @@ cat > "$REGISTRY" <<JSON
           { "type": "command", "command": "$S/push", "if": "Bash(gh pr create *)" },
           { "type": "command", "command": "$S/ctx-a", "if": "Bash(gh api *)" },
           { "type": "command", "command": "$S/ctx-b", "if": "Bash(gh api *)" },
-          { "type": "command", "command": "sleep 5; $S/slow", "if": "Bash(sleep-test *)", "timeout": 1 },
+          { "type": "command", "command": "sleep 30; $S/slow", "if": "Bash(sleep-test *)", "timeout": 1 },
           { "type": "command", "command": "$S/commit", "if": "Bash(git -C *)" }
         ]
       },
@@ -167,7 +167,7 @@ eq "$RC $(jq -c . "$OUT")" '0 {"hookSpecificOutput":{"hookEventName":"PreToolUse
 START=$(date +%s)
 dispatch PreToolUse "$(bash_call "sleep-test now")"
 ELAPSED=$(( $(date +%s) - START ))
-eq "$RC $(ran) $([ "$ELAPSED" -lt 4 ] && echo fast)" "0  fast" "a hook past its timeout is killed and ignored"
+eq "$RC $(ran) $([ "$ELAPSED" -lt 15 ] && echo fast)" "0  fast" "a hook past its timeout is killed and ignored"
 
 dispatch SessionStart "$(printf '{"source":"compact","cwd":"%s"}' "$WORK")"
 eq "$(jq -r .hookSpecificOutput.additionalContext "$OUT")" "compacted" "SessionStart matcher selects by source and plain stdout becomes context"

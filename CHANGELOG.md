@@ -1,3 +1,62 @@
+# [0.10.0](https://github.com/LukaPrebil/harness-config/compare/v0.9.0...v0.10.0) (2026-11-26)
+
+
+### Bug Fixes
+
+* **deny:** block glab and API merges, widen SQL case coverage ([#251](https://github.com/LukaPrebil/harness-config/issues/251)) ([a1084cf](https://github.com/LukaPrebil/harness-config/commit/a1084cfe10a56e4260f423dd3dcf5df26700ccdb))
+* **deps:** bump Node.js to 24.22.1 for October 2026 security release ([#199](https://github.com/LukaPrebil/harness-config/issues/199)) ([3cf8464](https://github.com/LukaPrebil/harness-config/commit/3cf84649f55ca3174845a8b43b3e2d486cf21dbb))
+* **herdr:** take the colour lock with noclobber, not mkdir ([#57](https://github.com/LukaPrebil/harness-config/issues/57)) ([717e1ba](https://github.com/LukaPrebil/harness-config/commit/717e1ba64f8b91e84324c6ab685d9d5b524d9eda))
+* **hooks:** close config gaps from usage insights ([#207](https://github.com/LukaPrebil/harness-config/issues/207)) ([86f52fa](https://github.com/LukaPrebil/harness-config/commit/86f52faa43d00dfcbe9683a6374846dd5c7c4118))
+* **hooks:** close reply, stamp, scrub, and run-once bypasses; parallel shell tests ([#222](https://github.com/LukaPrebil/harness-config/issues/222)) ([22e94dd](https://github.com/LukaPrebil/harness-config/commit/22e94dd6807bf00426139afb83f2230ba56f1078))
+* **hooks:** parse commit and push commands as shell words ([#221](https://github.com/LukaPrebil/harness-config/issues/221)) ([37d0444](https://github.com/LukaPrebil/harness-config/commit/37d0444838fe9880fe6b90b4d689ee115dec2cf5))
+* **hooks:** run hooks only from ~/.claude/hooks and close deny gate bypasses ([#220](https://github.com/LukaPrebil/harness-config/issues/220)) ([1d154ef](https://github.com/LukaPrebil/harness-config/commit/1d154ef6fb219856b19fdadf88f5087432e7403c))
+* **hooks:** run the push gate on the Node that .nvmrc pins ([#55](https://github.com/LukaPrebil/harness-config/issues/55)) ([5510dc2](https://github.com/LukaPrebil/harness-config/commit/5510dc2e7c4ce62dd4515722612a84d94e308a89))
+* **hooks:** scope the PR body gate to the gh call and resolve body-file variables ([#238](https://github.com/LukaPrebil/harness-config/issues/238)) ([137df03](https://github.com/LukaPrebil/harness-config/commit/137df034742877437b995274197bea2b7f63c721))
+* **hooks:** write the verify stamp the PR gate reads ([#203](https://github.com/LukaPrebil/harness-config/issues/203)) ([f3d1dd2](https://github.com/LukaPrebil/harness-config/commit/f3d1dd2f86bede55eb7181860ecdedb59d6f19e9))
+* **mods:** fit pr-band on one row without repeating the footer ([#224](https://github.com/LukaPrebil/harness-config/issues/224)) ([a696a58](https://github.com/LukaPrebil/harness-config/commit/a696a58006698573c56f8221bc565a98095ac246))
+* **rules:** require /worktree and forbid sandbox workarounds and --no-verify ([#250](https://github.com/LukaPrebil/harness-config/issues/250)) ([2a7a7b3](https://github.com/LukaPrebil/harness-config/commit/2a7a7b3bf7673df8fda3e83c3848bedf6bff207e))
+* **sandbox:** allow the Azure blob hosts that serve GitHub Actions logs ([#236](https://github.com/LukaPrebil/harness-config/issues/236)) ([e387e08](https://github.com/LukaPrebil/harness-config/commit/e387e089b8736fc0d596b5a3ce4382628004f3c7))
+* **sandbox:** commit hand-tuned sandbox settings and move the trusted verify stamp ([#232](https://github.com/LukaPrebil/harness-config/issues/232)) ([ca05047](https://github.com/LukaPrebil/harness-config/commit/ca05047d03aacccd15876c3b066874cc8e37cf0a))
+* **sandbox:** disable terraform checkpoint and allow tfenv config writes ([#252](https://github.com/LukaPrebil/harness-config/issues/252)) ([52cea49](https://github.com/LukaPrebil/harness-config/commit/52cea49f259989f875a5cac2df621f599f9354d0))
+* **sandbox:** remove agent friction with verify, git, node, and docker ([#235](https://github.com/LukaPrebil/harness-config/issues/235)) ([6b0c85d](https://github.com/LukaPrebil/harness-config/commit/6b0c85d47d1543596ddfe7407486532f46dcfd60))
+* **sandbox:** restore husky hooks in new worktrees and let docker build ([#234](https://github.com/LukaPrebil/harness-config/issues/234)) ([ab6213c](https://github.com/LukaPrebil/harness-config/commit/ab6213cd9f913c2adc7e43b3486f6ede69192f7c))
+* **sandbox:** route untemplated mktemp into TMPDIR for agent shells ([#253](https://github.com/LukaPrebil/harness-config/issues/253)) ([b02cb38](https://github.com/LukaPrebil/harness-config/commit/b02cb386d4f81dae9398ac74dad1f09e43b8bd0e))
+* **settings:** drop Write deny rules for the verify stamp ([#233](https://github.com/LukaPrebil/harness-config/issues/233)) ([cc7bd5f](https://github.com/LukaPrebil/harness-config/commit/cc7bd5fa8bda641c6f3fdb8170703ace95caedd3))
+* **skills:** create the handoff file under TMPDIR so the sandbox allows it ([#237](https://github.com/LukaPrebil/harness-config/issues/237)) ([da5c75e](https://github.com/LukaPrebil/harness-config/commit/da5c75e30704bd8181e430409ae5abe67a6a662e))
+* **worktree-prune:** stop deleting unpushed, locked, and in-use worktrees ([#219](https://github.com/LukaPrebil/harness-config/issues/219)) ([4c13522](https://github.com/LukaPrebil/harness-config/commit/4c1352269c1ca9b73593788001bbad3365b0ac67))
+* **worktree:** hand off --repo from an isolated session instead of failing ([#255](https://github.com/LukaPrebil/harness-config/issues/255)) ([c8da335](https://github.com/LukaPrebil/harness-config/commit/c8da335863632538b4f9d823f0320fe56c120e6b))
+
+
+### Features
+
+* **claude:** enable Code Mode ([#56](https://github.com/LukaPrebil/harness-config/issues/56)) ([8faf0c4](https://github.com/LukaPrebil/harness-config/commit/8faf0c42c29f7c234c016d81aa81f77bd9a39893))
+* create task worktrees in sibling repos for the home repo pattern ([#248](https://github.com/LukaPrebil/harness-config/issues/248)) ([b96b2bc](https://github.com/LukaPrebil/harness-config/commit/b96b2bcd59814641ed60cca0dfa85e399fdf8e87))
+* harness learning edge, settings updates, and subagent cache TTL ([#196](https://github.com/LukaPrebil/harness-config/issues/196)) ([2cf682d](https://github.com/LukaPrebil/harness-config/commit/2cf682d25e6a4523a581c9271d208d916e1f499d))
+* **hooks:** fast-forward the agent config at session start ([#239](https://github.com/LukaPrebil/harness-config/issues/239)) ([a042535](https://github.com/LukaPrebil/harness-config/commit/a042535133037cd1e66e9f32943785c006c5c207))
+* **hooks:** scrub email addresses from outbound tool calls ([#205](https://github.com/LukaPrebil/harness-config/issues/205)) ([6b7ddb1](https://github.com/LukaPrebil/harness-config/commit/6b7ddb19a95319ad1aa53701564e4d0bd4ed0e65))
+* **hooks:** show repo, branch, worktree, and repo color in the herdr sidebar ([#201](https://github.com/LukaPrebil/harness-config/issues/201)) ([a218387](https://github.com/LukaPrebil/harness-config/commit/a2183874f6490a5cc073a2ba1154a63aead3e31b))
+* **hooks:** watch opened PRs until they are ready to merge ([#197](https://github.com/LukaPrebil/harness-config/issues/197)) ([335cecb](https://github.com/LukaPrebil/harness-config/commit/335cecb15d6a6688ac4908a8d331110fdcdb7f7c))
+* **mods:** add alerts pane listing unresolved Sentry issues ([#217](https://github.com/LukaPrebil/harness-config/issues/217)) ([8570928](https://github.com/LukaPrebil/harness-config/commit/8570928f6d55f0d762ed8f09c4cdb721e1d6db46))
+* **mods:** add pr-fleet pane listing open PRs across repos ([#216](https://github.com/LukaPrebil/harness-config/issues/216)) ([aa2be79](https://github.com/LukaPrebil/harness-config/commit/aa2be7935abaf31542ac54502350295aed4e035d))
+* **mods:** add session-focus pane summarizing what each session is working on ([#223](https://github.com/LukaPrebil/harness-config/issues/223)) ([12debdf](https://github.com/LukaPrebil/harness-config/commit/12debdf936e062a2ab1b974c990a48f907a75162))
+* **mods:** add the pr-band mod and load it in every Claude session ([#206](https://github.com/LukaPrebil/harness-config/issues/206)) ([40eda38](https://github.com/LukaPrebil/harness-config/commit/40eda389b6573bc78295892e1751ec55417be6c4))
+* **mods:** send the session-focus label to the herdr sidebar ([#229](https://github.com/LukaPrebil/harness-config/issues/229)) ([62f1f79](https://github.com/LukaPrebil/harness-config/commit/62f1f799ca8d27d6a0492a8ab5b02f671972aa3b))
+* **mods:** show session-focus as a row above the prompt instead of a pane ([#228](https://github.com/LukaPrebil/harness-config/issues/228)) ([e7411ef](https://github.com/LukaPrebil/harness-config/commit/e7411efbb721fb742e7bbb4ae065821c35d3141b))
+* **pi:** run session hooks through the hook bridge ([#246](https://github.com/LukaPrebil/harness-config/issues/246)) ([8eb3b85](https://github.com/LukaPrebil/harness-config/commit/8eb3b8563a107a2928e8495fcfa07f93a2e8c0d1))
+* **review-pr:** vet findings with a skeptic pass before reporting ([#54](https://github.com/LukaPrebil/harness-config/issues/54)) ([4341aab](https://github.com/LukaPrebil/harness-config/commit/4341aabef7cbed78821b7144e652d5586d85bc7d))
+* **sandbox:** let agents refresh the nonprod gcloud token ([#254](https://github.com/LukaPrebil/harness-config/issues/254)) ([1b3b290](https://github.com/LukaPrebil/harness-config/commit/1b3b2909fbee143550e52190a4ed9f23f5d4171a))
+* **sandbox:** run Claude Code Bash in the OS sandbox with agent-only gcloud ([#230](https://github.com/LukaPrebil/harness-config/issues/230)) ([bfd88b3](https://github.com/LukaPrebil/harness-config/commit/bfd88b3370f5fa39ef93cf5f612863cf013a514c))
+* **settings:** allow read-only gh run list and view ([#200](https://github.com/LukaPrebil/harness-config/issues/200)) ([98cc1b5](https://github.com/LukaPrebil/harness-config/commit/98cc1b5883bc7c7e6aec333c3eab105db670eb8c))
+* **settings:** allow read-only spacectl stack commands ([#202](https://github.com/LukaPrebil/harness-config/issues/202)) ([d8bdaf8](https://github.com/LukaPrebil/harness-config/commit/d8bdaf8d2438b7adc9014f9e87ab34d77c6ccbf8))
+* **skills:** create worktrees with the built-in EnterWorktree under .claude/worktrees ([#231](https://github.com/LukaPrebil/harness-config/issues/231)) ([b864a22](https://github.com/LukaPrebil/harness-config/commit/b864a22bf11d002d8fbdec193e06ec875a93a63c))
+* **state:** keep workflow state in the target repo ([#247](https://github.com/LukaPrebil/harness-config/issues/247)) ([18a1a15](https://github.com/LukaPrebil/harness-config/commit/18a1a156928f9df263c3dd0eb433a280c15eb093))
+* **worktree-prune:** prune registered sibling repos at session end ([#249](https://github.com/LukaPrebil/harness-config/issues/249)) ([dcd5596](https://github.com/LukaPrebil/harness-config/commit/dcd5596da9768b30b5e04475903ef5d75541d568))
+
+
+### Performance Improvements
+
+* **hooks:** cut hook latency on tool calls ([#213](https://github.com/LukaPrebil/harness-config/issues/213)) ([c88545e](https://github.com/LukaPrebil/harness-config/commit/c88545ed035cc3c6aee85984c0955dabf6512fb0))
+
 # [0.9.0](https://github.com/LukaPrebil/harness-config/compare/v0.8.0...v0.9.0) (2026-11-22)
 
 

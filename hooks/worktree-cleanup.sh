@@ -1,32 +1,39 @@
 #!/bin/bash
 # SessionEnd hook: opportunistically prune safely-disposable worktrees in
-# the current repo, then converge its main checkout to the latest default
-# branch. Conservative - only removes worktrees whose branch is
-# upstream-gone, merged into default, or squash-merged, and convergence
-# only fast-forwards or stashes-with-note. Always exits 0; never blocks.
-# Disable per-session with CLAUDE_DISABLE_WORKTREE_CLEANUP=1.
+# the current repo, then in every repo listed in ~/.cache/agent/worktree-repos,
+# where sessions register sibling repos they made worktrees in. Conservative:
+# only removes worktrees whose branch is merged into default, squash-merged,
+# or upstream-gone with nothing unpushed. Locked worktrees and any touched in
+# the last 30 minutes stay, because other live sessions may be using them.
+# The current repo's main checkout then converges to the latest default
+# branch, which only fast-forwards or stashes with a note.
+# Always exits 0; never blocks.
+# Disable per-session with HARNESS_DISABLE_WORKTREE_CLEANUP=1, or the legacy
+# CLAUDE_DISABLE_WORKTREE_CLEANUP=1.
 
 set -u
 
-if [ "${CLAUDE_DISABLE_WORKTREE_CLEANUP:-0}" = "1" ]; then
+if [ "${HARNESS_DISABLE_WORKTREE_CLEANUP:-0}" = "1" ] || [ "${CLAUDE_DISABLE_WORKTREE_CLEANUP:-0}" = "1" ]; then
   exit 0
 fi
 
-SCRIPT="$CLAUDE_PROJECT_DIR/scripts/worktree-prune.sh"
-[ -x "$SCRIPT" ] || SCRIPT="$HOME/.claude/scripts/worktree-prune.sh"
+# The scripts come from this hook's own checkout, never the opened project,
+# so a repo cannot ship a scripts/worktree-prune.sh that runs here.
+SELF=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null) || exit 0
+ROOT="$(dirname "$(dirname "$SELF")")"
+SCRIPT="$ROOT/scripts/worktree-prune.sh"
+CONV="$ROOT/scripts/checkout-converge.sh"
 [ -x "$SCRIPT" ] || exit 0
 
-# Only run inside a git repo
-git -C "$PWD" rev-parse --show-toplevel >/dev/null 2>&1 || exit 0
+if git -C "$PWD" rev-parse --show-toplevel >/dev/null 2>&1; then
+  "$SCRIPT" --apply --min-idle 30 --repo "$PWD" >/dev/null 2>&1 || true
+  # The stash message is the durable note a later session reads.
+  [ -x "$CONV" ] && "$CONV" --fast "$PWD" >/dev/null 2>&1 || true
+fi
 
-# Run apply mode silently. The script is conservative; it will skip anything
-# uncertain and only remove obviously-safe entries.
-"$SCRIPT" --apply >/dev/null 2>&1 || true
-
-# Converge the main checkout to the latest default branch. Same advisory
-# posture: failures never block, and session-end output is discarded anyway.
-# The stash message is the durable note a later session reads.
-CONV="$CLAUDE_PROJECT_DIR/scripts/checkout-converge.sh"
-[ -x "$CONV" ] || CONV="$HOME/.claude/scripts/checkout-converge.sh"
-[ -x "$CONV" ] && "$CONV" --fast "$PWD" >/dev/null 2>&1 || true
+# The registry can list many repos and SessionEnd has a timeout, so that pass
+# runs detached with every stream closed and the hook returns at once. HUP is
+# ignored before exec, and a shell cannot re-trap a signal ignored at startup,
+# so closing the terminal cannot cut a repo short.
+( trap '' HUP; exec "$SCRIPT" --apply --min-idle 30 --registry ) </dev/null >/dev/null 2>&1 &
 exit 0

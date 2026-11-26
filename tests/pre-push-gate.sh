@@ -14,21 +14,16 @@
 set -u
 
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-TMP_ROOT=$(cd "${TMPDIR:-/tmp}" && pwd)
-TEST_ROOT=$(cd "$(mktemp -d "$TMP_ROOT/pre-push-gate-test.XXXXXX")" && pwd)
-PASSED=0
-FAILED=0
+# shellcheck source=lib/harness.sh
+. "$PROJECT_DIR/tests/lib/harness.sh"
+harness_init pre-push-gate
+STUB_LOG="$TEST_ROOT/stub.log"
 
-cleanup() {
-  case "$TEST_ROOT" in
-    "$TMP_ROOT"/pre-push-gate-test.*) rm -rf "$TEST_ROOT" ;;
-    *) echo "Refusing to clean unexpected test path: $TEST_ROOT" >&2 ;;
-  esac
+diagnose() {
+  echo "    exit ${STATUS:-}, got: ${OUT:-}"
+  [ -f "$STUB_LOG" ] && echo "    calls: $(paste -sd ';' - < "$STUB_LOG")"
+  return 0
 }
-trap cleanup EXIT HUP INT TERM
-
-pass() { PASSED=$((PASSED + 1)); echo "ok - $1"; }
-fail() { FAILED=$((FAILED + 1)); echo "not ok - $1" >&2; }
 
 # The build passes only when GATE_PROBE carries the template's value.
 make_project() {
@@ -47,86 +42,83 @@ JSON
   printf '# comment\nGATE_PROBE=from-template\n' > "$dir/.env.example"
 }
 
+# run_gate <dir> [command]: sets OUT and STATUS for a push from <dir>.
 run_gate() {
-  local dir="$1"
-  printf '{"cwd":"%s","tool_input":{"command":"git push origin feature/x"}}' "$dir" \
-    | (cd "$TEST_ROOT" && CLAUDE_PROJECT_DIR="" SKIP_PUSH_GATE="" bash "$PROJECT_DIR/hooks/pre-push-gate.sh" 2>&1)
+  OUT=$(payload "${2:-git push origin feature/x}" "$1" \
+    | (cd "$TEST_ROOT" && CLAUDE_PROJECT_DIR="" SKIP_PUSH_GATE="" bash "$PROJECT_DIR/hooks/pre-push-gate.sh" 2>&1))
+  STATUS=$?
 }
 
 FRESH="$TEST_ROOT/fresh"
 make_project "$FRESH"
-OUT=$(run_gate "$FRESH")
-case "$OUT" in
-  *"build (env from .env.example) FAILED"*) echo "    got: $OUT" >&2; fail "a checkout without .env builds with the template" ;;
-  *"build (env from .env.example)..."*) pass "a checkout without .env builds with the template" ;;
-  *) echo "    got: $OUT" >&2; fail "a checkout without .env builds with the template" ;;
-esac
+run_gate "$FRESH"
+check "a checkout without .env builds with the template" \
+  omits "build (env from .env.example) FAILED" says "build (env from .env.example)..."
 
 LOCAL="$TEST_ROOT/local"
 make_project "$LOCAL"
 printf 'GATE_PROBE=local\n' > "$LOCAL/.env"
-OUT=$(run_gate "$LOCAL")
-case "$OUT" in
-  *".env.example"*) echo "    got: $OUT" >&2; fail "a checkout with .env does not load the template" ;;
-  *"build FAILED"*) pass "a checkout with .env does not load the template" ;;
-  *) echo "    got: $OUT" >&2; fail "a checkout with .env does not load the template" ;;
-esac
-
-run_gate_cmd() {
-  local dir="$1" cmd="$2"
-  printf '{"cwd":"%s","tool_input":{"command":"%s"}}' "$dir" "$cmd" \
-    | (cd "$TEST_ROOT" && CLAUDE_PROJECT_DIR="" SKIP_PUSH_GATE="" bash "$PROJECT_DIR/hooks/pre-push-gate.sh" 2>&1)
-}
+run_gate "$LOCAL"
+check "a checkout with .env does not load the template" omits ".env.example" says "build FAILED"
 
 HOOKED="$TEST_ROOT/hooked"
 make_project "$HOOKED"
-mkdir -p "$HOOKED/.git/hooks"
-printf '#!/bin/sh\nexit 0\n' > "$HOOKED/.git/hooks/pre-push"
-chmod +x "$HOOKED/.git/hooks/pre-push"
-OUT=$(run_gate_cmd "$HOOKED" "git push origin feature/x")
-case "$OUT" in
-  *"has its own pre-push hook"*) pass "a repo with its own pre-push hook is not gated twice" ;;
-  *) echo "    got: $OUT" >&2; fail "a repo with its own pre-push hook is not gated twice" ;;
-esac
+printf '#!/bin/sh\nexit 0\n' | stub "$HOOKED/.git/hooks" pre-push
+run_gate "$HOOKED"
+check "a repo with its own pre-push hook is not gated twice" says "has its own pre-push hook"
 
-OUT=$(run_gate_cmd "$HOOKED" "git push --no-verify origin feature/x")
-case "$OUT" in
-  *"has its own pre-push hook"*) echo "    got: $OUT" >&2; fail "--no-verify keeps the gate in force" ;;
-  *"build (env from .env.example)..."*) pass "--no-verify keeps the gate in force" ;;
-  *) echo "    got: $OUT" >&2; fail "--no-verify keeps the gate in force" ;;
-esac
+run_gate "$HOOKED" "git push --no-verify origin feature/x"
+check "--no-verify keeps the gate in force" \
+  omits "has its own pre-push hook" says "build (env from .env.example)..."
 
 HUSKY="$TEST_ROOT/husky"
 make_project "$HUSKY"
-mkdir -p "$HUSKY/.husky/_"
-printf '#!/bin/sh\nexit 0\n' > "$HUSKY/.husky/_/pre-push"
-chmod +x "$HUSKY/.husky/_/pre-push"
+printf '#!/bin/sh\nexit 0\n' | stub "$HUSKY/.husky/_" pre-push
 git -C "$HUSKY" config core.hooksPath .husky/_
-OUT=$(run_gate_cmd "$HUSKY" "git push origin feature/x")
-case "$OUT" in
-  *"has its own pre-push hook"*) pass "a husky hooksPath hook counts as the repo's own gate" ;;
-  *) echo "    got: $OUT" >&2; fail "a husky hooksPath hook counts as the repo's own gate" ;;
-esac
+run_gate "$HUSKY"
+check "a husky hooksPath hook counts as the repo's own gate" says "has its own pre-push hook"
 
 NOHOOKS="$TEST_ROOT/nohooks"
 make_project "$NOHOOKS"
 git -C "$NOHOOKS" config core.hooksPath .husky/_
-OUT=$(run_gate_cmd "$NOHOOKS" "git push origin feature/x"); STATUS=$?
-case "$OUT" in
-  *"Run 'npm ci'"*) [ "$STATUS" -eq 2 ] && pass "a missing hooksPath directory blocks the push" \
-    || { echo "    exit $STATUS" >&2; fail "a missing hooksPath directory blocks the push"; } ;;
-  *) echo "    got: $OUT" >&2; fail "a missing hooksPath directory blocks the push" ;;
-esac
+run_gate "$NOHOOKS"
+check "a missing hooksPath directory blocks the push" says "Run 'npm ci'" exited 2
+
+# A linked worktree gets the main worktree's husky directory, because the
+# sandbox stops its own install from creating one.
+LINKED="$TEST_ROOT/linked"
+printf '.husky/_\n' > "$HUSKY/.gitignore"
+git -C "$HUSKY" add -A >/dev/null 2>&1
+git -C "$HUSKY" -c user.name=t -c user.email=t@t commit -qm init >/dev/null 2>&1
+git -C "$HUSKY" worktree add -q -b feature/linked "$LINKED" >/dev/null 2>&1
+mkdir -p "$LINKED/node_modules"
+run_gate "$LINKED"
+check "a linked worktree copies the main worktree's hooksPath directory" \
+  omits "Run 'npm ci'" says "has its own pre-push hook"
+if [ -x "$LINKED/.husky/_/pre-push" ]; then
+  pass "the copied hook stays executable"
+else
+  fail "the copied hook stays executable"
+fi
+
+# Any other relative hooksPath is not copied, so the copy cannot reach out of the repo.
+# The linked worktree sits one level deeper, so ../outside names a directory
+# that exists from the main worktree and not from the linked one.
+ESCAPE="$HUSKY/wt/escape"
+git -C "$HUSKY" worktree add -q -b feature/escape "$ESCAPE" >/dev/null 2>&1
+mkdir -p "$ESCAPE/node_modules" "$TEST_ROOT/outside"
+git -C "$ESCAPE" config core.hooksPath ../outside
+run_gate "$ESCAPE"
+check "a hooksPath other than .husky/_ is not copied" says "Run 'npm ci'" exited 2
+[ -e "$HUSKY/wt/outside" ] && fail "nothing is copied for another hooksPath"
+git -C "$ESCAPE" config core.hooksPath .husky/_
 
 # A global hooksPath is not the repo's own setting, and git expands its ~.
 GLOBALHOOKS="$TEST_ROOT/globalhooks"
 make_project "$GLOBALHOOKS"
 printf '[core]\n\thooksPath = ~/.githooks-missing\n' > "$TEST_ROOT/global.gitconfig"
-OUT=$(GIT_CONFIG_GLOBAL="$TEST_ROOT/global.gitconfig" run_gate_cmd "$GLOBALHOOKS" "git push origin feature/x")
-case "$OUT" in
-  *"Run 'npm ci'"*) echo "    got: $OUT" >&2; fail "a global ~ hooksPath does not block the push" ;;
-  *) pass "a global ~ hooksPath does not block the push" ;;
-esac
+GIT_CONFIG_GLOBAL="$TEST_ROOT/global.gitconfig" run_gate "$GLOBALHOOKS"
+check "a global ~ hooksPath does not block the push" omits "Run 'npm ci'"
 
 # verify:fast fails unless it runs, so a pass proves it ran and nothing else did.
 FAST="$TEST_ROOT/fast"
@@ -141,48 +133,93 @@ cat > "$FAST/package.json" <<'JSON'
   }
 }
 JSON
-OUT=$(run_gate_cmd "$FAST" "git push origin feature/x"); STATUS=$?
-if [ "$STATUS" -eq 0 ] && [ -f "$FAST/ran-fast" ] && ! printf '%s' "$OUT" | grep -q '\[pre-push-gate\] test'; then
-  pass "a repo declaring verify:fast runs only that"
-else
-  echo "    exit $STATUS, got: $OUT" >&2; fail "a repo declaring verify:fast runs only that"
-fi
+run_gate "$FAST"
+check "a repo declaring verify:fast runs only that" \
+  exited 0 omits "[pre-push-gate] test" test -f "$FAST/ran-fast"
 
 cat > "$FAST/package.json" <<'JSON'
 { "name": "probe", "private": true, "scripts": { "verify:fast": "node -e \"process.exit(3)\"" } }
 JSON
-OUT=$(run_gate_cmd "$FAST" "git push origin feature/x"); STATUS=$?
-case "$OUT" in
-  *"verify:fast FAILED"*) [ "$STATUS" -eq 2 ] && pass "a failing verify:fast blocks the push" \
-    || { echo "    exit $STATUS" >&2; fail "a failing verify:fast blocks the push"; } ;;
-  *) echo "    got: $OUT" >&2; fail "a failing verify:fast blocks the push" ;;
-esac
+run_gate "$FAST"
+check "a failing verify:fast blocks the push" says "verify:fast FAILED" exited 2
 
 # A stub bun records its arguments, so a pass proves the audit ran through Bun.
 BUNREPO="$TEST_ROOT/bunrepo"
 make_project "$BUNREPO"
 touch "$BUNREPO/bun.lock"
-mkdir -p "$TEST_ROOT/stubbin"
-printf '#!/bin/sh\necho "$@" > "%s/bun-args"\n' "$BUNREPO" > "$TEST_ROOT/stubbin/bun"
-chmod +x "$TEST_ROOT/stubbin/bun"
-OUT=$(PATH="$TEST_ROOT/stubbin:$PATH" run_gate_cmd "$BUNREPO" "git push origin feature/x"); STATUS=$?
-if [ "$STATUS" -eq 0 ] && [ "$(cat "$BUNREPO/bun-args" 2>/dev/null)" = "audit --audit-level=critical" ]; then
-  pass "a Bun repo audits with bun audit"
-else
-  echo "    exit $STATUS, got: $OUT" >&2; fail "a Bun repo audits with bun audit"
-fi
+printf '#!/bin/sh\necho "$@" > "%s/bun-args"\n' "$BUNREPO" | stub "$TEST_ROOT/stubbin" bun
+PATH="$TEST_ROOT/stubbin:$PATH" run_gate "$BUNREPO"
+check "a Bun repo audits with bun audit" \
+  exited 0 [ "$(cat "$BUNREPO/bun-args" 2>/dev/null)" = "audit --audit-level=critical" ]
 
 # A PATH holding only the tools the gate needs leaves bun out.
 mkdir -p "$TEST_ROOT/nobun"
-for tool in bash sh env cat dirname ls grep tail jq git node npm; do
+for tool in bash sh env cat dirname ls grep tail jq git node npm python3; do
   ln -s "$(command -v "$tool")" "$TEST_ROOT/nobun/$tool"
 done
-OUT=$(PATH="$TEST_ROOT/nobun" run_gate_cmd "$BUNREPO" "git push origin feature/x"); STATUS=$?
-case "$OUT" in
-  *"audit skipped: bun is not installed"*) [ "$STATUS" -eq 0 ] && pass "a Bun repo without bun skips the audit" \
-    || { echo "    exit $STATUS" >&2; fail "a Bun repo without bun skips the audit"; } ;;
-  *) echo "    got: $OUT" >&2; fail "a Bun repo without bun skips the audit" ;;
-esac
+PATH="$TEST_ROOT/nobun" run_gate "$BUNREPO"
+check "a Bun repo without bun skips the audit" says "audit skipped: bun is not installed" exited 0
+
+echo ""
+echo "== merged branch =="
+
+# A stub gh answers `gh pr view` with STUB_PR_STATE, the way -q prints it.
+stub "$TEST_ROOT/ghbin" gh <<'STUB'
+#!/bin/sh
+[ -n "$STUB_PR_STATE" ] || exit 1
+echo "$STUB_PR_STATE"
+STUB
+
+MERGEDREPO="$TEST_ROOT/mergedrepo"
+make_project "$MERGEDREPO"
+git -C "$MERGEDREPO" checkout -q -b feature/x
+
+# gate_as <pr-state> <command>: runs the gate in MERGEDREPO with gh reporting <pr-state>.
+gate_as() {
+  STUB_PR_STATE="$1" PATH="$TEST_ROOT/ghbin:$PATH" run_gate "$MERGEDREPO" "$2"
+}
+MERGED="MERGED https://github.com/o/r/pull/7"
+
+gate_as "$MERGED" "git push origin feature/x"
+check "a push to a merged branch blocks" says "already merged in https://github.com/o/r/pull/7" exited 2
+
+for CMD in "git push origin HEAD" "git push -u origin feature/x" "git push origin HEAD:feature/x" \
+  "git push -o ci.skip origin HEAD" "git commit -m 'update push gate docs' && git push origin HEAD" \
+  "git -C $MERGEDREPO push origin feature/x"; do
+  gate_as "$MERGED" "$CMD"
+  check "'$CMD' on a merged branch blocks" exited 2
+done
+
+# A delete or a push of another branch is not a push of the merged branch.
+for CMD in "git push origin --delete feature/x" "git push origin :feature/x" "git push origin other" \
+  "git push origin --tags"; do
+  gate_as "$MERGED" "$CMD"
+  check "'$CMD' skips the merge check" omits "already merged"
+done
+
+gate_as "OPEN https://github.com/o/r/pull/8" "git push origin feature/x"
+check "a push to a branch with an open PR passes the merge check" omits "already merged"
+
+gate_as "$MERGED" "SKIP_PUSH_GATE=1 git push origin feature/x"
+check "an inline SKIP_PUSH_GATE=1 is not a bypass" exited 2 says "already merged"
+check "the merged block never suggests a bypass" omits "SKIP_PUSH_GATE"
+
+OUT=$(payload "git push origin feature/x" "$MERGEDREPO" \
+  | (cd "$TEST_ROOT" && CLAUDE_PROJECT_DIR="" SKIP_PUSH_GATE=1 STUB_PR_STATE="$MERGED" PATH="$TEST_ROOT/ghbin:$PATH" \
+    bash "$PROJECT_DIR/hooks/pre-push-gate.sh" 2>&1))
+STATUS=$?
+check "SKIP_PUSH_GATE=1 in the host environment bypasses the gate" exited 0
+
+gate_as "$MERGED" "git -C \"$MERGEDREPO\" -c core.x=y push origin feature/x"
+check "a quoted git -C push on a merged branch blocks" exited 2 says "already merged"
+
+# A failing check runs first, so the merged block must still show.
+printf '{"scripts":{"build":"exit 1"}}\n' > "$MERGEDREPO/package.json"
+gate_as "$MERGED" "git push origin feature/x"
+check "a failing check does not hide the merged block" exited 2 says "build" says "already merged"
+
+gate_as "OPEN https://github.com/o/r/pull/8" "git push origin feature/x"
+check "a failing step names the step without a bypass hint" exited 2 says "[pre-push-gate] build" omits "SKIP_PUSH_GATE"
 
 echo ""
 echo "== package manager =="
@@ -190,15 +227,14 @@ echo "== package manager =="
 # Only the tools the gate needs, plus stub managers that log their argv. A
 # stub answers --version with STUB_VERSION and an audit with STUB_AUDIT_EXIT.
 BIN="$TEST_ROOT/bin"
-STUB_LOG="$TEST_ROOT/stub.log"
 mkdir -p "$BIN"
-for TOOL in bash cat dirname git grep head jq ls node sed tail mktemp tar rm; do
+for TOOL in bash cat dirname git grep head jq ls node python3 sed tail mktemp tar rm; do
   TOOL_PATH=$(command -v "$TOOL") || { echo "Missing required tool: $TOOL" >&2; exit 1; }
   ln -s "$TOOL_PATH" "$BIN/$TOOL"
 done
 
 make_stub() {
-  cat > "$BIN/$1" <<'STUB'
+  stub "$BIN" "$1" <<'STUB'
 #!/bin/bash
 echo "${0##*/} $*" >> "$STUB_LOG"
 case " $* " in
@@ -207,7 +243,6 @@ case " $* " in
 esac
 exit 0
 STUB
-  chmod +x "$BIN/$1"
 }
 make_stub npm
 make_stub pnpm
@@ -223,30 +258,15 @@ pm_project() {
   echo "$dir"
 }
 
-# run_pm_gate <dir>: sets OUT and STATUS, and starts STUB_LOG empty.
+# run_pm_gate <dir>: runs the gate under the stub PATH, and starts STUB_LOG empty.
 run_pm_gate() {
   : > "$STUB_LOG"
-  OUT=$(printf '{"cwd":"%s","tool_input":{"command":"git push origin feature/x"}}' "$1" \
-    | (cd "$TEST_ROOT" && PATH="$BIN" STUB_LOG="$STUB_LOG" CLAUDE_PROJECT_DIR="" SKIP_PUSH_GATE="" \
-      bash "$PROJECT_DIR/hooks/pre-push-gate.sh" 2>&1))
-  STATUS=$?
+  PATH="$BIN" STUB_LOG="$STUB_LOG" run_gate "$1"
 }
 
-exited() { [ "$STATUS" -eq "$1" ]; }
-says() { case "$OUT" in *"$1"*) return 0 ;; *) return 1 ;; esac; }
 logged() { grep -qxF -- "$1" "$STUB_LOG"; }
 never_ran() { ! grep -q -- "^$1 " "$STUB_LOG"; }
 
-# check <name> <predicate> [args...]
-check() {
-  local name="$1"
-  shift
-  if "$@"; then pass "$name"; else
-    echo "    exit $STATUS, got: $OUT" >&2
-    echo "    calls: $(paste -sd ';' - < "$STUB_LOG")" >&2
-    fail "$name"
-  fi
-}
 
 REPO=$(pm_project pnpm-field '{"packageManager":"pnpm@10.4.1","scripts":{"lint":"x","build":"x"}}')
 run_pm_gate "$REPO"
@@ -302,18 +322,79 @@ check "a missing package manager blocks" exited 2
 check "the block names the missing manager" says "uses pnpm, which is not on PATH"
 make_stub pnpm
 
-REPO=$(pm_project no-modules)
+REPO=$(pm_project no-modules '{"scripts":{"lint":"x"},"devDependencies":{"x":"1.0.0"}}')
 : > "$REPO/pnpm-lock.yaml"
 rmdir "$REPO/node_modules"
 run_pm_gate "$REPO"
-check "a missing node_modules blocks" exited 2
-check "the block names the pnpm install" says "run 'pnpm install' there first"
+check "a missing node_modules blocks when dependencies are declared" exited 2
+check "the block names the pnpm install" says "[pre-push-gate]" says "run 'pnpm install' there first"
+
+REPO=$(pm_project no-deps '{"scripts":{"lint":"x"},"peerDependencies":{"x":"*"}}')
+rmdir "$REPO/node_modules"
+run_pm_gate "$REPO"
+check "a repo declaring no dependencies needs no node_modules" exited 0 logged "npm --silent run lint"
 
 REPO=$(pm_project pnpm-husky)
 : > "$REPO/pnpm-lock.yaml"
 git -C "$REPO" config core.hooksPath .husky/_
 run_pm_gate "$REPO"
 check "a missing hooksPath directory names the pnpm install" says "Run 'pnpm install' in"
+
+echo ""
+echo "== audit only when the lockfile changed =="
+
+# A repo pushed to a bare origin, so @{upstream} and origin/HEAD resolve.
+REPO=$(pm_project lock-upstream)
+echo '{}' > "$REPO/package-lock.json"
+git -C "$REPO" add -A
+git -C "$REPO" commit -q -m "chore: init"
+git init -q --bare "$TEST_ROOT/lock-origin.git"
+git -C "$REPO" remote add origin "$TEST_ROOT/lock-origin.git"
+git -C "$REPO" push -q -u origin HEAD 2>/dev/null
+git -C "$REPO" remote set-head origin -a >/dev/null 2>&1
+git -C "$REPO" commit -q --allow-empty -m "fix: touch nothing"
+run_pm_gate "$REPO"
+check "an unchanged lockfile skips npm audit" exited 0 says "audit skipped" never_ran "npm audit"
+
+echo '{"lockfileVersion":3}' > "$REPO/package-lock.json"
+git -C "$REPO" commit -q -am "chore: bump lock"
+run_pm_gate "$REPO"
+check "a changed lockfile runs npm audit" logged "npm audit --audit-level=critical"
+
+git -C "$REPO" branch -q --unset-upstream
+run_pm_gate "$REPO"
+check "without an upstream, origin/HEAD is the base" logged "npm audit --audit-level=critical"
+git -C "$REPO" reset -q --hard HEAD~1
+run_pm_gate "$REPO"
+check "origin/HEAD with an unchanged lockfile skips the audit" says "audit skipped"
+
+echo ""
+echo "== main checkout and worktree =="
+
+# verify:fast marks the directory it ran in. The main checkout's marker
+# proves the gate ran the wrong checkout's checks.
+MAIN="$TEST_ROOT/main-checkout"
+mkdir -p "$MAIN"
+printf '%s\n' '{"scripts":{"verify:fast":"touch ran-here"}}' > "$MAIN/package.json"
+make_repo "$MAIN"
+LANE="$MAIN/.claude/worktrees/lane"
+git -C "$MAIN" worktree add -q -b feature/lane "$LANE"
+
+# run_lane <cwd> <command>: the gate with CLAUDE_PROJECT_DIR on the main checkout.
+run_lane() {
+  rm -f "$MAIN/ran-here" "$LANE/ran-here"
+  OUT=$(payload "$2" "$1" | (cd "$TEST_ROOT" && CLAUDE_PROJECT_DIR="$MAIN" SKIP_PUSH_GATE="" \
+    bash "$PROJECT_DIR/hooks/pre-push-gate.sh" 2>&1))
+  STATUS=$?
+}
+run_lane "$MAIN" "git -C \"$LANE\" push origin feature/lane"
+check "a dependency-free worktree without node_modules passes" exited 0
+check "a quoted git -C worktree push from the main checkout runs the worktree's checks" test -f "$LANE/ran-here"
+check "the main checkout's checks do not run for a worktree push" not test -f "$MAIN/ran-here"
+run_lane "$LANE" "git push origin feature/lane"
+check "a push from the worktree cwd checks the worktree" test -f "$LANE/ran-here"
+run_lane "$LANE" "cd \"$MAIN\" && git push origin main"
+check "a cd to the main checkout beats the worktree cwd" test -f "$MAIN/ran-here"
 
 make_stub yarn
 
@@ -343,8 +424,8 @@ echo ""
 echo "== .nvmrc Node =="
 
 # A fake nvm whose resolver knows one installed version. Its node logs a
-# marker and runs the real node, so a logged marker proves the gate put the
-# pinned Node first on PATH.
+# marker and runs the real node. The npm stub in this section runs node, so
+# a logged marker proves the checks found the pinned Node first on PATH.
 FAKE_NVM="$TEST_ROOT/nvm"
 REAL_NODE=$(command -v node)
 mkdir -p "$FAKE_NVM/versions/node/v24.1.0/bin"
@@ -361,6 +442,12 @@ printf '#!/bin/bash\necho "nvm-node" >> "$STUB_LOG"\nexec "%s" "$@"\n' "$REAL_NO
 chmod +x "$FAKE_NVM/versions/node/v24.1.0/bin/node"
 used_nvm_node() { grep -qx nvm-node "$STUB_LOG"; }
 skipped_nvm_node() { ! used_nvm_node; }
+stub "$BIN" npm <<'STUB'
+#!/bin/bash
+echo "npm $*" >> "$STUB_LOG"
+node -e '' >/dev/null 2>&1
+exit 0
+STUB
 
 REPO=$(pm_project nvmrc-installed)
 : > "$REPO/package-lock.json"
@@ -393,6 +480,7 @@ REPO=$(pm_project no-nvmrc)
 : > "$REPO/package-lock.json"
 NVM_DIR="$FAKE_NVM" run_pm_gate "$REPO"
 check "a repo without .nvmrc keeps the PATH Node" skipped_nvm_node
+make_stub npm
 
 echo ""
 echo "== dependency audit =="
@@ -545,6 +633,4 @@ check "the block names the extraction failure" says "could not be extracted"
 check "no audit ran" never_ran_audit
 ln -s "$(command -v tar)" "$BIN/tar"
 
-echo ""
-echo "$PASSED passed; $FAILED failed"
-[ "$FAILED" -eq 0 ]
+finish

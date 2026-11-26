@@ -23,7 +23,7 @@ One machine-local `skills/synced/<account-or-org>_<user>/` directory that Claude
 _Avoid_: "synced folder", "skill cache", "plugin cache" - a bucket is not disposable.
 
 **Shared root**:
-The repo-owned `~/.agents/` directory, linked on every host, holding the trees a shared skill may name by absolute path: `skills`, `rules`, `scripts`, `templates`, `references`, `agents`, and the pull request template. A shared file names `~/.agents/...`, never a host's own config dir.
+The repo-owned `~/.agents/` directory, whose entries `scripts/setup-hosts.sh` links on every host to the same-named paths in this checkout, with `pull_request_template.md` linked to `.github/pull_request_template.md`, holding the trees a shared skill may name by absolute path: `skills`, `rules`, `scripts`, `templates`, `references`, `agents`, and the pull request template. A shared file names `~/.agents/...`, never a host's own config dir.
 _Avoid_: `~/.claude/...` inside `skills/`, `rules/`, or `agents/` for anything but a genuinely Claude-only mechanism such as hooks.
 
 **Compatibility notation**:
@@ -124,6 +124,10 @@ _Avoid_: "read-only agent", "reviewer agent", "mechanically read-only" - Bash ma
 A full-tool persona that can mutate files and therefore serve as a lane-mode teammate.
 _Avoid_: "builder agent", "implementer agent".
 
+**Home repo**:
+The repo a session starts in, from its main checkout, that sends each task to a sibling repo under `~/dev` with its own worktree and PR there.
+_Avoid_: "hub repo", "launch repo" (that is any session's start repo, home or not).
+
 ### Skill model
 
 **Model-invoked skill**:
@@ -213,7 +217,7 @@ _Avoid_: "push audit", "audit every push".
 - The **Host bootstrap** installs every **Host adapter** while the legacy Claude setup command, `scripts/setup-symlinks.sh`, remains a compatibility entrypoint.
 - The **Host bootstrap** leaves provider, model, and credential choices to each **Agent host** user.
 - A **Host adapter** may add host-specific behavior but must not redefine shared guidance.
-- **Behavioral parity** is the first multi-host milestone; **Mechanical parity** is translated and verified separately for each host.
+- **Behavioral parity** holds across every **Agent host**; **Mechanical parity** is translated and verified separately for each host.
 - A **Permission gate** enforces the **Deny list** on one Agent host; rules without a translation for that host are surfaced, not silently dropped.
 - All hosts translate one canonical **Deny list**; a host may enforce a superset, never a subset.
 - A host's permission mechanism derives its rules from the **Deny list**; a generated or synced copy is acceptable, a second hand-maintained policy file is not.
@@ -250,5 +254,5 @@ _Avoid_: "push audit", "audit every push".
 - "Full Pi support" was ambiguous - resolved: Pi loads shared behavior in every native mode; **Teammate** spawning (including background runs and panel-style steering) carries mechanical parity through the `pi-subagents` package.
 - "subagent" was used for both the generic spawn mechanism and a named agent - resolved: a named agent is a **Teammate**; "subagent" refers only to the generic Agent-tool spawn.
 - "skill" was used for both sequencing workflows and single practices - resolved: a sequencing skill is an **Orchestrator**, a single-practice skill is a **Reusable discipline**.
-- "full permission parity for pi" was ambiguous - resolved: the Pi **Permission gate** enforces a **superset** of the **Deny list** on file tools (Edit rules also bind writes; bash matching covers command segments), so any parity claim names its direction.
+- "full permission parity for pi" was ambiguous - resolved: the Pi **Permission gate** enforces a **superset** of the **Deny list** on file tools (Edit rules also bind writes; the package's bash command enumeration is a superset of per-segment matching), so any parity claim names its direction.
 - "install" named three different things - resolved: how the Pi binary itself is present is a **Managed install** or an npm install; `pi install <source>` installs a Pi package; the **Host bootstrap** installs links. Name which one.

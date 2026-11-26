@@ -5,37 +5,18 @@
 set -u
 
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=lib/harness.sh
+. "$PROJECT_DIR/tests/lib/harness.sh"
 HOOK="$PROJECT_DIR/hooks/symlink-check.sh"
-# Both paths are normalised: TMPDIR often carries a trailing slash, and the
-# bootstrap normalises its own repo path before comparing link targets.
-TMP_ROOT=$(cd "${TMPDIR:-/tmp}" && pwd)
-TEST_ROOT=$(cd "$(mktemp -d "$TMP_ROOT/symlink-check-test.XXXXXX")" && pwd)
-PASSED=0
-FAILED=0
-
-cleanup() {
-  case "$TEST_ROOT" in
-    "$TMP_ROOT"/symlink-check-test.*) rm -rf "$TEST_ROOT" ;;
-    *) echo "Refusing to clean unexpected test path: $TEST_ROOT" >&2 ;;
-  esac
-}
-trap cleanup EXIT HUP INT TERM
-
-pass() {
-  PASSED=$((PASSED + 1))
-  echo "ok - $1"
-}
-
-fail() {
-  FAILED=$((FAILED + 1))
-  echo "not ok - $1" >&2
-}
+# harness_init normalises the temp path because the bootstrap normalises its
+# own repo path before comparing link targets.
+harness_init symlink-check
 
 # A fake checkout carrying only what the Claude manifest links.
 FAKE_REPO="$TEST_ROOT/repo"
 mkdir -p "$FAKE_REPO/scripts" "$FAKE_REPO/.github"
 cp "$PROJECT_DIR/scripts/setup-hosts.sh" "$FAKE_REPO/scripts/setup-hosts.sh"
-for NAME in agents hooks rules skills docs references templates; do
+for NAME in agents hooks rules skills docs references templates mods; do
   mkdir -p "$FAKE_REPO/$NAME"
 done
 : > "$FAKE_REPO/AGENTS.md"
@@ -181,6 +162,4 @@ if [ -s "$TEST_ROOT/err" ]; then fail "absent checkout is silent"; else pass "ab
 ABSENT_DIR="$TEST_HOME/.claude-does-not-exist"
 assert_silent "absent config dir is silent" "$ABSENT_DIR"
 
-echo ""
-echo "$PASSED passed; $FAILED failed"
-[ "$FAILED" -eq 0 ]
+finish

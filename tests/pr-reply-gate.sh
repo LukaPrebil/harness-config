@@ -6,50 +6,26 @@
 set -u
 
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=lib/harness.sh
+. "$PROJECT_DIR/tests/lib/harness.sh"
 GATE="$PROJECT_DIR/hooks/pre-pr-reply-gate.sh"
-PASSED=0
-FAILED=0
 
-TMP_ROOT=$(cd "${TMPDIR:-/tmp}" && pwd)
-TEST_DIR=$(cd "$(mktemp -d "$TMP_ROOT/pr-reply-gate-test.XXXXXX")" && pwd)
+harness_init pr-reply-gate TEST_DIR
 
-cleanup() {
-  case "$TEST_DIR" in
-    "$TMP_ROOT"/pr-reply-gate-test.*) rm -rf "$TEST_DIR" ;;
-    *) echo "Refusing to clean unexpected test path: $TEST_DIR" >&2 ;;
-  esac
-}
-trap cleanup EXIT HUP INT TERM
-
-mkdir -p "$TEST_DIR/bin"
-cat > "$TEST_DIR/bin/gh" <<'STUB'
+stub "$TEST_DIR/bin" gh <<'STUB'
 #!/bin/bash
 case "$*" in
+  *repos/other/*) exit 1 ;;
   *pulls/comments/111*) echo "bot" ;;
   *pulls/comments/222*) echo "human:alice" ;;
   *) exit 1 ;;
 esac
 STUB
-chmod +x "$TEST_DIR/bin/gh"
 export PATH="$TEST_DIR/bin:$PATH"
 
-pass() { PASSED=$((PASSED + 1)); echo "ok - $1"; }
-fail() { FAILED=$((FAILED + 1)); echo "not ok - $1" >&2; }
-
-payload() {
-  COMMAND="$1" CWD="$TEST_DIR" python3 -c 'import json,os; print(json.dumps({"tool_input":{"command":os.environ["COMMAND"]},"cwd":os.environ["CWD"]}))'
-}
-
 # assert_gate <name> <command> <expected-exit>
-assert_gate() {
-  local name="$1" command="$2" want="$3" got
-  payload "$command" | bash "$GATE" >/dev/null 2>&1
-  got=$?
-  if [ "$got" -eq "$want" ]; then pass "$name"; else
-    echo "    want exit $want, got $got" >&2
-    fail "$name"
-  fi
-}
+assert_gate() { expect_exit "$1" "$3" run_gate "$2"; }
+run_gate() { payload "$1" "$TEST_DIR" | bash "$GATE"; }
 
 GH_API="gh ""api"
 GH_PR_COMMENT="gh ""pr comment"
@@ -68,6 +44,14 @@ assert_gate "an in_reply_to comment to a bot passes" \
   "$GH_API repos/acme/app/pulls/7/comments -F in_reply_to=111 -f body=\"Done. $FOOTER\"" 0
 assert_gate "a failed author lookup blocks" \
   "$GH_API repos/{owner}/{repo}/pulls/7/comments/333/replies -f body=\"Done. $FOOTER\"" 2
+assert_gate "a git -C path inside a bot reply body does not pick the repo" \
+  "$GH_API repos/{owner}/{repo}/pulls/7/comments/111/replies -f body=\"Run git -C $TEST_DIR/missing push. $FOOTER\"" 0
+assert_gate "a git -C path inside a PR comment body does not pick the repo" \
+  "$GH_PR_COMMENT 7 --body \"Run git -C $TEST_DIR/missing push. $FOOTER\"" 0
+assert_gate "a repos path inside a reply body does not pick the repo" \
+  "$GH_API repos/{owner}/{repo}/pulls/7/comments/111/replies -f body=\"See repos/other/thing/pulls/3. $FOOTER\"" 0
+assert_gate "a reply path inside a reply body does not pick the parent" \
+  "$GH_API repos/{owner}/{repo}/pulls/7/comments/111/replies -f body=\"Like pulls/7/comments/222/replies. $FOOTER\"" 0
 assert_gate "a read-only gh api call passes" \
   "$GH_API repos/{owner}/{repo}/pulls/7/comments" 0
 assert_gate "an unrelated command passes" \
@@ -93,13 +77,34 @@ assert_gate "a --body-file with the footer passes" \
 printf 'Done.\n' > "$TEST_DIR/bare.md"
 assert_gate "a --body-file without the footer is blocked" \
   "$GH_PR_COMMENT 7 --body-file bare.md" 2
-if payload "$GH_PR_COMMENT 7 --body \"Done.\"" | SKIP_REPLY_FOOTER=1 bash "$GATE" >/dev/null 2>&1; then
+assert_gate "a --body-file variable set in the command is read" \
+  "f=reply.md; $GH_ISSUE_COMMENT 7 --body-file \"\$f\"" 0
+assert_gate "a --body-file variable set to a bare body is blocked" \
+  "f=reply.md; f=bare.md; $GH_ISSUE_COMMENT 7 --body-file \"\$f\"" 2
+cp "$TEST_DIR/reply.md" "$TEST_DIR/reply2.md"
+assert_gate "a loop over bodies with the footer passes" \
+  "for f in reply.md reply2.md; do $GH_ISSUE_COMMENT 7 --body-file \"\$f\"; done" 0
+assert_gate "a loop with one bare body is blocked" \
+  "for f in reply.md bare.md; do $GH_ISSUE_COMMENT 7 --body-file \"\$f\"; done" 2
+assert_gate "a glob loop is blocked, because the hook expands it before the command runs" \
+  "for f in reply*.md; do $GH_ISSUE_COMMENT 7 --body-file \"\${f}\"; done" 2
+assert_gate "a loop over a body file the same command writes is blocked" \
+  "printf 'Done.' > reply2.md && for f in reply.md reply2.md; do $GH_ISSUE_COMMENT 7 --body-file \"\$f\"; done" 2
+assert_gate "a body file the same command writes is blocked" \
+  "printf 'Done.' > reply.md && $GH_ISSUE_COMMENT 7 --body-file reply.md" 2
+assert_gate "a --body-file variable the gate cannot resolve is blocked" \
+  "$GH_ISSUE_COMMENT 7 --body-file \"\$f\"" 2
+if payload "$GH_PR_COMMENT 7 --body \"Done.\"" "$TEST_DIR" | SKIP_REPLY_FOOTER=1 bash "$GATE" >/dev/null 2>&1; then
   pass "SKIP_REPLY_FOOTER lets a comment through"
 else
   fail "SKIP_REPLY_FOOTER lets a comment through"
 fi
 assert_gate "help is not gated" \
   "$GH_PR_COMMENT --help" 0
+assert_gate "a --help inside the body is still gated" \
+  "$GH_PR_COMMENT 7 --body \"Run it with --help.\"" 2
+assert_gate "a comment chained before a help call is still gated" \
+  "$GH_PR_COMMENT 7 --body \"Done.\" && $GH_PR_COMMENT --help" 2
 assert_gate "a footer outside the body does not count" \
   "echo \"$FOOTER\" && $GH_PR_COMMENT 7 --body \"Done.\"" 2
 assert_gate "a footer on the same line as the text is blocked" \
@@ -132,6 +137,72 @@ assert_gate "an approval without a body passes" \
   "$GH_PR_REVIEW 7 --approve" 0
 
 echo
+echo "== calls the gate cannot read =="
+printf '{"body": "Done."}\n' > "$TEST_DIR/reply.json"
+assert_gate "a comment sent with --input is blocked" \
+  "$GH_API repos/acme/app/pulls/1/comments --input reply.json" 2
+assert_gate "a reply sent with --input is blocked" \
+  "$GH_API repos/acme/app/pulls/1/comments/111/replies --input=reply.json" 2
+assert_gate "a variable in_reply_to is blocked" \
+  "$GH_API repos/acme/app/pulls/7/comments -F in_reply_to=\$ID -f body=\"Done. $FOOTER\"" 2
+assert_gate "a quoted variable in_reply_to is blocked" \
+  "$GH_API repos/acme/app/pulls/7/comments -F \"in_reply_to=\${ID}\" -f body=\"Done. $FOOTER\"" 2
+assert_gate "a bot in_reply_to in the body does not hide a human parent" \
+  "$GH_API repos/acme/app/pulls/7/comments -F in_reply_to=222 -f body=\"See in_reply_to=111 for context. $FOOTER\"" 2
+assert_gate "a human in_reply_to in the body still counts after a bot parent" \
+  "$GH_API repos/acme/app/pulls/7/comments -F in_reply_to=111 -f body=\"See in_reply_to=222 for context. $FOOTER\"" 2
+assert_gate "a quoted body field still gets the footer check" \
+  "$GH_API repos/acme/app/issues/7/comments -f \"body=Done.\"" 2
+assert_gate "a quoted body field with the footer passes" \
+  "$GH_API repos/acme/app/issues/7/comments -f \"body=Done. $FOOTER\"" 0
+assert_gate "a stdin heredoc body with the footer passes" \
+  "$GH_API repos/{owner}/{repo}/pulls/7/comments/111/replies -F body=@- <<'EOF'
+Done.
+
+$SIGNATURE
+EOF" 0
+assert_gate "a stdin heredoc body without the footer is blocked" \
+  "$GH_API repos/{owner}/{repo}/pulls/7/comments/111/replies -F body=@- <<'EOF'
+Done.
+EOF" 2
+assert_gate "a GraphQL thread reply is blocked" \
+  "$GH_API graphql -f query='mutation{addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:\"x\",body:\"Done. $FOOTER\"}){comment{id}}}'" 2
+assert_gate "a GraphQL review comment is blocked" \
+  "$GH_API graphql -f query='mutation{addPullRequestReviewComment(input:{body:\"x\"}){clientMutationId}}'" 2
+assert_gate "a GraphQL issue comment is blocked" \
+  "$GH_API graphql -f query='mutation(\$id:ID!,\$b:String!){addComment(input:{subjectId:\$id,body:\$b}){clientMutationId}}' -f id=x -f b=y" 2
+assert_gate "a GraphQL review with a body is blocked" \
+  "$GH_API graphql -f query='mutation{addPullRequestReview(input:{pullRequestId:\"x\",event:COMMENT,body:\"y\"}){clientMutationId}}'" 2
+assert_gate "a GraphQL approval without a body passes" \
+  "$GH_API graphql -f query='mutation{addPullRequestReview(input:{pullRequestId:\"x\",event:APPROVE}){clientMutationId}}'" 0
+printf 'mutation{addComment(input:{subjectId:"x",body:"y"}){clientMutationId}}\n' > "$TEST_DIR/comment.graphql"
+assert_gate "a GraphQL comment read from a query file is blocked" \
+  "$GH_API graphql -F query=@comment.graphql" 2
+assert_gate "a GraphQL query the shell builds is blocked" \
+  "$GH_API graphql -f query=\"\$(cat comment.graphql)\"" 2
+assert_gate "a GraphQL comment read from a quoted --input file is blocked" \
+  "$GH_API graphql --input \"comment.graphql\"" 2
+assert_gate "a GraphQL comment read from a quoted query file is blocked" \
+  "$GH_API graphql -F query=@'comment.graphql'" 2
+assert_gate "a GraphQL --input path the shell builds is blocked" \
+  "$GH_API graphql --input \"\$F\"" 2
+printf 'query{viewer{login}}\n' > "$TEST_DIR/viewer.graphql"
+assert_gate "a GraphQL query read from a quoted file passes" \
+  "$GH_API graphql --input \"viewer.graphql\"" 0
+assert_gate "a GraphQL document read from stdin is blocked" \
+  "$GH_API graphql --input -" 2
+assert_gate "a GraphQL comment sent to a quoted endpoint is blocked" \
+  "$GH_API 'graphql' -f query='mutation{addComment(input:{subjectId:\"x\",body:\"y\"}){clientMutationId}}'" 2
+assert_gate "a GraphQL comment sent to /graphql is blocked" \
+  "$GH_API /graphql -f query='mutation{addComment(input:{subjectId:\"x\",body:\"y\"}){clientMutationId}}'" 2
+assert_gate "a GraphQL review body edit is blocked" \
+  "$GH_API graphql -f query='mutation{updatePullRequestReview(input:{pullRequestReviewId:\"x\",body:\"y\"}){clientMutationId}}'" 2
+assert_gate "a GraphQL thread resolve passes" \
+  "$GH_API graphql -f query='mutation{resolveReviewThread(input:{threadId:\"x\"}){thread{id}}}'" 0
+assert_gate "a GraphQL query passes" \
+  "$GH_API graphql -f query='query{viewer{login}}'" 0
+
+echo
 echo "== bodies that are not comments =="
 assert_gate "a PR body posted through gh api passes" \
   "$GH_API repos/acme/app/pulls -f title=\"feat: x\" -f body=\"Adds x.\"" 0
@@ -140,6 +211,4 @@ assert_gate "a PR body edit through gh api passes" \
 assert_gate "a release body passes" \
   "$GH_API repos/acme/app/releases -f tag_name=v1 -f body=\"Notes.\"" 0
 
-echo
-echo "$PASSED passed, $FAILED failed"
-[ "$FAILED" -eq 0 ]
+finish

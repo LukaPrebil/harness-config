@@ -14,6 +14,11 @@ Hooks and deny rules back these. Know them to avoid hitting the gate.
 - Rebase onto the target branch (`git fetch origin main && git rebase origin/main`) before opening a PR. Update an open PR with `gh pr update-branch`, never a force-push `(review-time: no hook checks this)`
 - Pushes run the repo's `verify:fast` when declared. Open or ready a PR only after `npm run verify` passes at HEAD `(hook)`
 
+## Checkouts and refusals
+
+- Edit the live agent config only from a worktree. Use `/worktree --repo` for another repo, never a sparse checkout, clone, or worktree outside `.claude/worktrees` `(review-time: hooks cannot see checkout shape)`
+- On a gate refusal, stop. Relay a `!` command only when a tool printed one. Never use or suggest `--no-verify` `(review-time: user shell commands skip hooks)`
+
 ## Judgment calls
 
 - Commit, push, and open the PR for feature-branch work without asking once its checks pass `(review-time: requires judging that the checks ran)`

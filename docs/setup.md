@@ -5,7 +5,8 @@ How to install this config, scope it per machine, and wire each host. For the bi
 ## How hosts find the config
 
 - Every host shares `AGENTS.md`, `skills/`, `rules/`, `.claude/state/`, the hook registry, and the deny list. Each host wires hooks, permissions, notifications, and teammates its own way.
-- Hosts hold symlinks to this checkout, not copies. An edit is live at once, and moving the checkout breaks every host.
+- Hosts hold symlinks to this checkout, not copies. An edit is live at once, and moving the checkout breaks every host. Run `bash scripts/setup-hosts.sh --apply --adopt` from the new location to relink them, including the Codex `hooks.json`.
+- Each session start checks the links. Claude Code runs `hooks/symlink-check.sh`, which prints the fix command. Pi runs the [`drift-check`](#extensions) extension. Codex shows no warning, as [Codex](#codex) explains.
 - Every host also gets `~/.agents/`, the shared root. A shared skill names `~/.agents/...`, so one path resolves on every host.
 
 ## Requirements
@@ -15,13 +16,13 @@ How to install this config, scope it per machine, and wire each host. For the bi
 | `git`, `bash` | Everything |
 | `jq` | `setup-hosts.sh` for Codex, and the `settings.json` git filter |
 | `python3` | `hooks/lib/dispatch.sh` on Codex and Pi, and `config-integrity.sh` |
-| Node.js 22.18 or later | `hooks/deny-gate.sh`, which runs its TypeScript directly. Without `node`, the deny gate allows everything |
-| Node.js 22.19 or later | `npm test`, from the `engines` floor in `package.json`. This version also satisfies the deny gate |
+| Node.js 22.18 or later | `hooks/deny-gate.sh`, which runs its TypeScript directly. Without `node`, the deny gate blocks every call on Codex and passes elsewhere |
+| Node.js 22.19 or later | `npm test`, from the `engines` floor in `package.json`. Install this version, because it also satisfies the deny gate |
 | Claude Code, Codex, or Pi | At least one host |
 
 ## Install
 
-`scripts/setup-hosts.sh` links each host to this checkout.
+`scripts/setup-hosts.sh` links each host to this checkout. With no `--host`, it sets up every host, so `bash scripts/setup-hosts.sh --apply` is a full install.
 
 | Mode | Does | Exit code |
 | --- | --- | --- |
@@ -40,7 +41,7 @@ How to install this config, scope it per machine, and wire each host. For the bi
 | --- | --- | --- |
 | Claude Code | `CLAUDE.md` | `AGENTS.md` |
 | Claude Code | `settings.json` | `settings.json` |
-| Claude Code | `agents`, `hooks`, `rules`, `skills`, `scripts`, `docs`, `references`, `templates` | The same-named dirs |
+| Claude Code | `agents`, `hooks`, `rules`, `skills`, `scripts`, `docs`, `references`, `templates`, `mods` | The same-named dirs |
 | Claude Code | `statusline.sh` | `scripts/statusline.sh` |
 | Claude Code | `pull_request_template.md` | `.github/pull_request_template.md` |
 | Codex | `AGENTS.md` | `AGENTS.md` |
@@ -58,6 +59,31 @@ Claude Code gets `CLAUDE.md` because it reads `AGENTS.md` only at project level.
 
 `~/bin` holds one shim per host: `pi`, `claude`, and the `agent-account` router both of them call. The bootstrap links them from `shims/`. Each shim reads the working directory, sets that host's config dir, and execs the real binary, so `~/bin` has to stay ahead of Homebrew's `bin` directories on PATH. Everything else that reaches these binaries by absolute path is unaffected.
 
+## Claude Code environment
+
+The `env` block in `settings.json` sets these variables for every Claude Code session:
+
+| Variable | Value | Enables |
+| --- | --- | --- |
+| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | `1` | Claude Code's experimental agent teams feature, for the teammates that lane and panel mode spawn |
+| `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE` | `1` | [Code Mode](https://code.claude.com/docs/en/code-mode): Claude runs tool calls from JavaScript in the `REPL` tool. Deny rules and `PreToolUse` hooks still see each call under its usual name |
+| `CLAUDE_CODE_PLUGIN_DIRS` | `~/.claude/mods/session-focus:~/.claude/mods/pr-fleet:~/.claude/mods/alerts` | Loads the [session-focus](../mods/session-focus/README.md), [pr-fleet](../mods/pr-fleet/README.md), and [alerts](../mods/alerts/README.md) mods from the linked `mods/` dir |
+
+`attribution` is empty for commits and PRs, so Claude Code does not ask for the trailers and footers the commit and PR gates refuse.
+
+This fork leaves Claude Code's OS sandbox off. A `SessionStart` hook still sources `hooks/lib/agent-shell.sh` into every Bash command, which drops the interactive `rm`, `mv`, and `cp` aliases, picks node from the nearest `.nvmrc`, and points `XDG_CACHE_HOME` at `~/.cache/agent`.
+
+## Run from a home repo
+
+The [home repo pattern](https://aihero.dev/the-home-repo-pattern) runs one session from a single repo, the home repo. Each task goes to a sibling repo under `~/dev` and gets its own worktree and PR there.
+
+- Start the session in the home repo's main checkout with `claude`, not `claude -w`. A worktree-isolated session may only touch its own worktree, so it cannot reach a sibling repo.
+- Reach a child repo with `/worktree --repo <path> <slug>`. It runs `~/.agents/scripts/repo-worktree.sh`, which creates `<repo>/.claude/worktrees/<slug>` and lists the repo in `~/.cache/agent/worktree-repos`. The SessionEnd cleanup hook reads that file and prunes merged worktrees in each listed repo. The session then works there with `git -C` and absolute paths. The sandbox lets a session write every repo under `~/dev`, except `.husky` and the `.claude` settings, `hooks`, `skills`, `agents`, and `commands`. The script refuses a base that tracks those paths and prints a command to run yourself with `!`.
+- Subagent `isolation: "worktree"` and `EnterWorktree` create worktrees only in the launch repo. For a child repo, create the worktree first and brief the subagent to work in its path, as `/drive-fleet` does.
+- Push with `git push origin <branch>`. The new branch has no upstream, and `-u` would write `.git/config`.
+- Clean up a merged child worktree with `/worktree-merge <worktree-path>`.
+- To load a child repo's `CLAUDE.md`, add the repo with `--add-dir <path>` and set `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1`. The variable applies only to directories added with `--add-dir`.
+
 ## Keep runtime state out of commits
 
 Claude Code and Pi write runtime keys into `settings.json`. The two `git config` lines in the [quick start](../README.md#quick-start) install a clean filter that strips them. `.gitattributes` applies the filter to `settings.json` and `pi/settings.json`.
@@ -70,7 +96,7 @@ These variables change what the bootstrap links:
 
 | Variable | Default | Sets |
 | --- | --- | --- |
-| `AGENT_CONFIG_REPO` | The checkout the script runs from | The repo the links point to |
+| `AGENT_CONFIG_REPO` | `CLAUDE_DOTFILES_REPO` when set, then the checkout the script runs from, then `~/dev/personal/agent-config` when the script sits outside a git checkout | The repo the links point to |
 | `CLAUDE_CONFIG_DIRS` | `~/.claude ~/.claude-personal` | The Claude Code dirs. When unset, `CLAUDE_CONFIG_DIR` names one dir |
 | `PI_CONFIG_DIRS` | `~/.pi/agent ~/.pi-personal/agent` | The Pi agent dirs. When unset, `PI_CODING_AGENT_DIR` names one dir |
 | `CODEX_HOME` | `~/.codex` | The Codex dir |
@@ -91,9 +117,10 @@ A machine that skips some default dirs records its scope in the scope file. The 
 
 The Pi `drift-check` extension runs `--check` for every host at each session start. Without the scope file, it reports drift on dirs this machine never adopted.
 
-Two paths assume the default dirs:
+Three paths assume the default dirs:
 
-- The hook commands and the status line in `settings.json` fall back to `~/.claude/...`. A machine that uses only `~/.claude-personal` still needs the `~/.claude` links.
+- The hook commands in `settings.json` run only `~/.claude/hooks/...`, and the status line and herdr hook use `~/.claude/` paths only. A machine that uses only `~/.claude-personal` still needs the `~/.claude` links.
+- `CLAUDE_CODE_PLUGIN_DIRS` names only `~/.claude/mods/` paths. A machine without the `~/.claude` links loads no mod.
 - `pi/settings.json` loads the hook bridge into subagents from `~/.pi/agent/extensions/`. A machine with only `~/.pi-personal/agent` runs subagents without it.
 
 ## Codex
@@ -111,7 +138,7 @@ The bootstrap adds these `config.toml` settings, each only when absent:
 It refuses the whole config step in these cases, and `--adopt` does not help:
 
 - `config.toml` is not a regular file.
-- A setting or table appears twice, or a setting sits outside its table.
+- A setting or table appears twice, a root setting sits inside a table, or `tui` settings are nested or dotted with no `[tui]` table.
 - The fallback list differs, or `hooks` is not `true`.
 
 Fix the file by hand, then run `--apply` again.
@@ -148,13 +175,12 @@ The bootstrap does not install or upgrade Pi; updates arrive through `pi update`
 | Extension | Does |
 | --- | --- |
 | `permission-gate` | Derives Pi's permission policy from the deny list at each session start |
-| `hook-bridge` | Runs the registry hooks on Pi's `bash`, `edit`, and `write` calls through `hooks/lib/dispatch.sh` |
+| `hook-bridge` | Runs the registry hooks on Pi's `bash`, `edit`, and `write` calls, session start, and session end through `hooks/lib/dispatch.sh` |
 | `drift-check` | Runs `setup-hosts.sh --check` at session start and warns on drift |
-| `worktree-cleanup` | Runs `scripts/worktree-prune.sh --apply` at session shutdown |
 | `statusline` | Replaces the footer with folder, branch, tokens, cost, context, usage windows, and model |
-| `herdr-agent-state` | Reports session state to herdr when `HERDR_ENV=1` |
+| `herdr-agent-state` | Reports session state to herdr when `HERDR_ENV=1` and herdr sets its socket path and pane ID |
 
-**`permission-gate`** turns `Read` rules into `path_read` surfaces, `Edit` and `Write` rules into `path_write`, and passes `Bash` and MCP rules through. The pinned [`@gotgenes/pi-permission-system`](https://pi.dev/packages/@gotgenes/pi-permission-system) package enforces the result. The extension writes `pi/extensions/pi-permission-system/config.json` and announces a stale policy.
+**`permission-gate`** turns `Read` rules into `path_read` surfaces, `Edit` and `Write` rules into `path_write`, and passes `Bash` and MCP rules through. The pinned [`@gotgenes/pi-permission-system`](https://pi.dev/packages/@gotgenes/pi-permission-system) package enforces the result. The extension writes `pi/extensions/pi-permission-system/config.json`. When it cannot refresh that file, it shows an error at session start and the package keeps the last generated policy. Separately, `hooks/deny-gate.sh` runs on Pi through `hook-bridge` and blocks shell commands that name a denied path. It also applies the `Bash` rules, after normalizing each command, because the package matches them literally.
 
 - The generated policy holds only deny rules, and the fallback is `allow`, so deny wins and headless sessions never prompt.
 - The bash surface lists its `*: allow` catch-all first, because the package applies the last matching rule.

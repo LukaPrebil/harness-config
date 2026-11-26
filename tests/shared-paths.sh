@@ -2,19 +2,16 @@
 # Every ~/.agents path named in shared content must resolve to a real file in
 # this checkout, and its first segment must be a tree the bootstrap links.
 #
-# This is the guard for the class of bug where a shared file names a path that
-# does not exist: the rulebook skill shipped 14 such rows after a vendoring,
-# and nothing caught it. Repo-only, so it holds in CI and on any machine.
+# A shared file that names a missing path points every host at a file that is
+# not there, and no other check reads these paths. The test reads only the
+# repo, so it holds in CI and on any machine.
 
 set -u
 
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=lib/harness.sh
+. "$PROJECT_DIR/tests/lib/harness.sh"
 cd "$PROJECT_DIR" || exit 1
-PASSED=0
-FAILED=0
-
-pass() { PASSED=$((PASSED + 1)); echo "ok - $1"; }
-fail() { FAILED=$((FAILED + 1)); echo "not ok - $1" >&2; }
 
 # The shared manifest, read from the bootstrap so this test cannot drift from
 # what --apply actually creates.
@@ -106,6 +103,4 @@ else
   printf '%s\n' "$STRAY" >&2
 fi
 
-echo ""
-echo "$PASSED passed; $FAILED failed"
-[ "$FAILED" -eq 0 ]
+finish

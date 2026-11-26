@@ -110,7 +110,29 @@ if [ ! -d "$REPO" ]; then
 fi
 REPO=$(cd "$REPO" && pwd)
 
-CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+# Hosts keep their links for good, while worktree cleanup deletes worktrees,
+# so a link must never point into a linked worktree. The script's own checkout
+# resolves to its main checkout; an explicit override naming a worktree is a
+# mistake worth stopping on.
+REPO_COMMON=$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+REPO_GITDIR=$(git -C "$REPO" rev-parse --path-format=absolute --git-dir 2>/dev/null)
+REPO_TOP=$(cd "$REPO" && git rev-parse --show-toplevel 2>/dev/null)
+if [ -n "$REPO_COMMON" ] && [ "$REPO_COMMON" != "$REPO_GITDIR" ] \
+  && [ "$(cd "$REPO_TOP" 2>/dev/null && pwd -P)" = "$(cd "$REPO" && pwd -P)" ]; then
+  MAIN_CHECKOUT=$(dirname "$REPO_COMMON")
+  if [ -n "${AGENT_CONFIG_REPO:-}${CLAUDE_DOTFILES_REPO:-}" ]; then
+    echo "Refusing to link hosts to the worktree $REPO." >&2
+    echo "Worktree cleanup deletes it later. Point AGENT_CONFIG_REPO at the main checkout: $MAIN_CHECKOUT" >&2
+    exit 1
+  fi
+  if [ "$(basename "$REPO_COMMON")" != ".git" ] || [ ! -d "$MAIN_CHECKOUT" ]; then
+    echo "Refusing to link hosts to the worktree $REPO: its repo has no main checkout." >&2
+    exit 1
+  fi
+  echo "Linking hosts to the main checkout $MAIN_CHECKOUT, not the worktree $REPO." >&2
+  REPO=$(cd "$MAIN_CHECKOUT" && pwd)
+fi
+
 CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
 SHARED_DIR="$HOME/.agents"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
@@ -144,12 +166,11 @@ next_backup() {
   printf "%s\n" "$BACKUP_CANDIDATE"
 }
 
-ensure_parent() {
-  PARENT=$(dirname "$1")
-  if [ -d "$PARENT" ]; then
-    return 0
-  fi
-  mkdir -p "$PARENT"
+home_tag() {
+  case "$1" in
+    "$HOME"/*) printf '~%s\n' "${1#"$HOME"}" ;;
+    *) printf '%s\n' "$1" ;;
+  esac
 }
 
 manage_link() {
@@ -163,40 +184,30 @@ manage_link() {
     return
   fi
 
+  CONFLICT=""
   if [ -L "$LIVE" ]; then
     CURRENT=$(readlink "$LIVE")
     if [ "$CURRENT" = "$TARGET" ]; then
       report "$LABEL" "OK" "already correct"
       return
     fi
-    if [ "$MODE" = "check" ]; then
-      report "$LABEL" "WRONG-LINK" "$CURRENT (expected $TARGET)"
-      mark_issue
-      return
-    fi
-    if [ "$ADOPT" -eq 0 ]; then
-      report "$LABEL" "REFUSED" "wrong link; re-run with --adopt"
-      mark_issue
-      return
-    fi
-    BACKUP=$(next_backup "$LIVE")
-    if mv "$LIVE" "$BACKUP" && ln -s "$TARGET" "$LIVE"; then
-      report "$LABEL" "ADOPTED" "backup: $BACKUP"
-    else
-      report "$LABEL" "FAILED" "could not back up and link"
-      mark_issue
-    fi
-    return
+    CONFLICT="wrong link"
+    CHECK_STATE="WRONG-LINK"
+    CHECK_DETAIL="$CURRENT (expected $TARGET)"
+  elif [ -e "$LIVE" ]; then
+    CONFLICT="real path"
+    CHECK_STATE="CONFLICT"
+    CHECK_DETAIL="real path (requires --adopt)"
   fi
 
-  if [ -e "$LIVE" ]; then
+  if [ -n "$CONFLICT" ]; then
     if [ "$MODE" = "check" ]; then
-      report "$LABEL" "CONFLICT" "real path (requires --adopt)"
+      report "$LABEL" "$CHECK_STATE" "$CHECK_DETAIL"
       mark_issue
       return
     fi
     if [ "$ADOPT" -eq 0 ]; then
-      report "$LABEL" "REFUSED" "real path; re-run with --adopt"
+      report "$LABEL" "REFUSED" "$CONFLICT; re-run with --adopt"
       mark_issue
       return
     fi
@@ -216,7 +227,7 @@ manage_link() {
     return
   fi
 
-  if ensure_parent "$LIVE" && ln -s "$TARGET" "$LIVE"; then
+  if mkdir -p "$(dirname "$LIVE")" && ln -s "$TARGET" "$LIVE"; then
     report "$LABEL" "CREATED" "$TARGET"
   else
     report "$LABEL" "FAILED" "could not create link"
@@ -224,393 +235,17 @@ manage_link() {
   fi
 }
 
-manage_codex_config() {
-  CONFIG="$CODEX_DIR/config.toml"
-  FALLBACK='project_doc_fallback_filenames = ["CLAUDE.md"]'
-  CONTEXT_WINDOW='model_context_window = 1050000'
-  COMPACT_LIMIT='model_auto_compact_token_limit = 950000'
-  STATUS_LINE='status_line = ["project-name", "git-branch", "model-with-reasoning", "context-used", "five-hour-limit", "weekly-limit", "thread-credits", "estimated-thread-cost"]'
-  FALLBACK_MANUAL="manually set TOML root: $FALLBACK"
-  CONTEXT_MANUAL="manually set TOML root: $CONTEXT_WINDOW"
-  COMPACT_MANUAL="manually set TOML root: $COMPACT_LIMIT"
-  STATUS_MANUAL="manually set under [tui]: $STATUS_LINE"
-  HOOKS_FEATURE='hooks = true'
-  HOOKS_MANUAL="manually set under [features]: $HOOKS_FEATURE"
-  ADD_FALLBACK=1
-  ADD_CONTEXT=1
-  ADD_COMPACT=1
-  ADD_STATUS=1
-  ADD_HOOKS=1
-  TUI_COUNT=0
-
-  if [ -L "$CONFIG" ] || { [ -e "$CONFIG" ] && [ ! -f "$CONFIG" ]; }; then
-    report "codex/config.toml" "REFUSED" "must be a regular file; $FALLBACK_MANUAL"
-    mark_issue
-    return
-  fi
-
-  if [ -f "$CONFIG" ]; then
-    KEY_INFO=$(awk '
-      /^[[:space:]]*\[/ { in_table=1 }
-      /^[[:space:]]*project_doc_fallback_filenames[[:space:]]*=/ {
-        if (in_table) print "table:" $0; else print "root:" $0
-      }
-    ' "$CONFIG")
-    KEY_COUNT=$(printf "%s\n" "$KEY_INFO" | awk 'NF { count++ } END { print count+0 }')
-
-    if [ "$KEY_COUNT" -gt 1 ]; then
-      report "codex/config.toml" "REFUSED" "multiple fallback keys; $FALLBACK_MANUAL"
-      mark_issue
-      return
-    fi
-    if [ "$KEY_COUNT" -eq 1 ]; then
-      case "$KEY_INFO" in
-        root:*'['*CLAUDE.md*']'*)
-          ADD_FALLBACK=0
-          ;;
-        root:*)
-          report "codex/config.toml" "REFUSED" "fallback differs or is multiline; $FALLBACK_MANUAL"
-          mark_issue
-          return
-          ;;
-        table:*)
-          report "codex/config.toml" "REFUSED" "fallback is not at TOML root; $FALLBACK_MANUAL"
-          mark_issue
-          return
-          ;;
-      esac
-    fi
-
-    CONTEXT_INFO=$(awk '
-      /^[[:space:]]*\[/ { in_table=1 }
-      /^[[:space:]]*model_context_window[[:space:]]*=/ {
-        if (in_table) print "table:" $0; else print "root:" $0
-      }
-    ' "$CONFIG")
-    CONTEXT_COUNT=$(printf "%s\n" "$CONTEXT_INFO" | awk 'NF { count++ } END { print count+0 }')
-    if [ "$CONTEXT_COUNT" -gt 1 ]; then
-      report "codex/config.toml" "REFUSED" "multiple context-window keys; $CONTEXT_MANUAL"
-      mark_issue
-      return
-    elif [ "$CONTEXT_COUNT" -eq 1 ]; then
-      case "$CONTEXT_INFO" in
-        root:*) ADD_CONTEXT=0 ;;
-        table:*)
-          report "codex/config.toml" "REFUSED" "context window is not at TOML root; $CONTEXT_MANUAL"
-          mark_issue
-          return
-          ;;
-      esac
-    fi
-
-    COMPACT_INFO=$(awk '
-      /^[[:space:]]*\[/ { in_table=1 }
-      /^[[:space:]]*model_auto_compact_token_limit[[:space:]]*=/ {
-        if (in_table) print "table:" $0; else print "root:" $0
-      }
-    ' "$CONFIG")
-    COMPACT_COUNT=$(printf "%s\n" "$COMPACT_INFO" | awk 'NF { count++ } END { print count+0 }')
-    if [ "$COMPACT_COUNT" -gt 1 ]; then
-      report "codex/config.toml" "REFUSED" "multiple auto-compact keys; $COMPACT_MANUAL"
-      mark_issue
-      return
-    elif [ "$COMPACT_COUNT" -eq 1 ]; then
-      case "$COMPACT_INFO" in
-        root:*) ADD_COMPACT=0 ;;
-        table:*)
-          report "codex/config.toml" "REFUSED" "auto-compact limit is not at TOML root; $COMPACT_MANUAL"
-          mark_issue
-          return
-          ;;
-      esac
-    fi
-
-    STATUS_INFO=$(awk '
-      /^[[:space:]]*\[/ {
-        if (!seen_table) seen_table=1
-        in_tui = ($0 ~ /^[[:space:]]*\[tui\][[:space:]]*(#.*)?$/)
-      }
-      !seen_table && /^[[:space:]]*tui[.]status_line[[:space:]]*=/ { print "root:" $0 }
-      in_tui && /^[[:space:]]*status_line[[:space:]]*=/ { print "tui:" $0 }
-    ' "$CONFIG")
-    STATUS_COUNT=$(printf "%s\n" "$STATUS_INFO" | awk 'NF { count++ } END { print count+0 }')
-    TUI_COUNT=$(awk '/^[[:space:]]*\[tui\][[:space:]]*(#.*)?$/ { count++ } END { print count+0 }' "$CONFIG")
-
-    if [ "$STATUS_COUNT" -gt 1 ]; then
-      report "codex/config.toml" "REFUSED" "multiple status lines; $STATUS_MANUAL"
-      mark_issue
-      return
-    fi
-    if [ "$STATUS_COUNT" -eq 1 ]; then
-      ADD_STATUS=0
-    elif [ "$TUI_COUNT" -gt 1 ]; then
-      report "codex/config.toml" "REFUSED" "multiple [tui] tables; $STATUS_MANUAL"
-      mark_issue
-      return
-    elif [ "$TUI_COUNT" -eq 0 ]; then
-      TUI_AMBIGUOUS=$(awk '
-        /^[[:space:]]*\[/ { seen_table=1 }
-        /^[[:space:]]*\[tui[.]/ { found=1 }
-        !seen_table && /^[[:space:]]*tui[.]/ { found=1 }
-        END { print found+0 }
-      ' "$CONFIG")
-      if [ "$TUI_AMBIGUOUS" -eq 1 ]; then
-        report "codex/config.toml" "REFUSED" "nested or dotted tui config; $STATUS_MANUAL"
-        mark_issue
-        return
-      fi
-    fi
-
-    HOOKS_INFO=$(awk '
-      /^[[:space:]]*\[/ {
-        if (!seen_table) seen_table=1
-        in_features = ($0 ~ /^[[:space:]]*\[features\][[:space:]]*(#.*)?$/)
-      }
-      !seen_table && /^[[:space:]]*features[.]hooks[[:space:]]*=/ { print "root:" $0 }
-      in_features && /^[[:space:]]*hooks[[:space:]]*=/ { print "features:" $0 }
-    ' "$CONFIG")
-    HOOKS_COUNT=$(printf "%s\n" "$HOOKS_INFO" | awk 'NF { count++ } END { print count+0 }')
-    FEATURES_COUNT=$(awk '/^[[:space:]]*\[features\][[:space:]]*(#.*)?$/ { count++ } END { print count+0 }' "$CONFIG")
-
-    if [ "$HOOKS_COUNT" -gt 1 ]; then
-      report "codex/config.toml" "REFUSED" "multiple hooks feature keys; $HOOKS_MANUAL"
-      mark_issue
-      return
-    fi
-    if [ "$HOOKS_COUNT" -eq 1 ]; then
-      if ! printf "%s\n" "$HOOKS_INFO" | grep -Eq '=[[:space:]]*true[[:space:]]*(#.*)?$'; then
-        report "codex/config.toml" "REFUSED" "hooks feature is not true; $HOOKS_MANUAL"
-        mark_issue
-        return
-      fi
-      ADD_HOOKS=0
-    elif [ "$FEATURES_COUNT" -gt 1 ]; then
-      report "codex/config.toml" "REFUSED" "multiple [features] tables; $HOOKS_MANUAL"
-      mark_issue
-      return
-    elif [ "$FEATURES_COUNT" -eq 0 ]; then
-      FEATURES_AMBIGUOUS=$(awk '
-        /^[[:space:]]*\[/ { seen_table=1 }
-        /^[[:space:]]*\[features[.]/ { found=1 }
-        !seen_table && /^[[:space:]]*features[.]/ { found=1 }
-        END { print found+0 }
-      ' "$CONFIG")
-      if [ "$FEATURES_AMBIGUOUS" -eq 1 ]; then
-        report "codex/config.toml" "REFUSED" "nested or dotted features config; $HOOKS_MANUAL"
-        mark_issue
-        return
-      fi
-    fi
-  fi
-
-  if [ "$ADD_FALLBACK" -eq 0 ] && [ "$ADD_CONTEXT" -eq 0 ] && [ "$ADD_COMPACT" -eq 0 ] && [ "$ADD_STATUS" -eq 0 ] && [ "$ADD_HOOKS" -eq 0 ]; then
-    report "codex/config.toml" "OK" "managed defaults configured"
-    return
-  fi
-
-  if [ "$MODE" = "check" ]; then
-    if [ "$ADD_FALLBACK" -eq 1 ]; then
-      report "codex/config.toml" "MISSING" "would add root fallback key"
-      mark_issue
-    fi
-    if [ "$ADD_CONTEXT" -eq 1 ]; then
-      report "codex/config.toml" "MISSING" "would add 1.05M context window"
-      mark_issue
-    fi
-    if [ "$ADD_COMPACT" -eq 1 ]; then
-      report "codex/config.toml" "MISSING" "would add long-context compaction limit"
-      mark_issue
-    fi
-    if [ "$ADD_STATUS" -eq 1 ]; then
-      report "codex/config.toml" "MISSING" "would add default status line"
-      mark_issue
-    fi
-    if [ "$ADD_HOOKS" -eq 1 ]; then
-      report "codex/config.toml" "MISSING" "would enable the hooks feature"
-      mark_issue
-    fi
-    return
-  fi
-
-  if ! ensure_parent "$CONFIG"; then
-    report "codex/config.toml" "FAILED" "could not create parent directory"
-    mark_issue
-    return
-  fi
-
-  if [ -f "$CONFIG" ]; then
-    CONFIG_BACKUP=$(next_backup "$CONFIG")
-    if ! mv "$CONFIG" "$CONFIG_BACKUP"; then
-      report "codex/config.toml" "FAILED" "could not create backup"
-      mark_issue
-      return
-    fi
-    PREPENDED_ROOT=$((ADD_FALLBACK + ADD_CONTEXT + ADD_COMPACT))
-    if {
-      if [ "$ADD_FALLBACK" -eq 1 ]; then
-        printf "%s\n" "$FALLBACK"
-      fi
-      if [ "$ADD_CONTEXT" -eq 1 ]; then
-        printf "%s\n" "$CONTEXT_WINDOW"
-      fi
-      if [ "$ADD_COMPACT" -eq 1 ]; then
-        printf "%s\n" "$COMPACT_LIMIT"
-      fi
-      if [ "$PREPENDED_ROOT" -gt 0 ] && [ -s "$CONFIG_BACKUP" ]; then
-        printf "\n"
-      fi
-      awk -v add_status="$ADD_STATUS" -v add_hooks="$ADD_HOOKS" -v prepended="$PREPENDED_ROOT" \
-        -v status_line="$STATUS_LINE" -v hooks_feature="$HOOKS_FEATURE" '
-        { print }
-        add_status && $0 ~ /^[[:space:]]*\[tui\][[:space:]]*(#.*)?$/ {
-          print status_line
-          status_done=1
-        }
-        add_hooks && $0 ~ /^[[:space:]]*\[features\][[:space:]]*(#.*)?$/ {
-          print hooks_feature
-          hooks_done=1
-        }
-        END {
-          written = NR > 0 || prepended
-          if (add_status && !status_done) {
-            if (written) print ""
-            print "[tui]"
-            print status_line
-            written=1
-          }
-          if (add_hooks && !hooks_done) {
-            if (written) print ""
-            print "[features]"
-            print hooks_feature
-          }
-        }
-      ' "$CONFIG_BACKUP"
-    } > "$CONFIG"; then
-      CONFIG_CHANGE="added missing managed defaults"
-      report "codex/config.toml" "UPDATED" "$CONFIG_CHANGE; backup: $CONFIG_BACKUP"
-    else
-      FAILED_COPY=$(next_backup "$CONFIG.failed")
-      mv "$CONFIG" "$FAILED_COPY" 2>/dev/null || true
-      mv "$CONFIG_BACKUP" "$CONFIG" 2>/dev/null || true
-      report "codex/config.toml" "FAILED" "write failed; original restored if possible"
-      mark_issue
-    fi
-  elif {
-    printf "%s\n" "$FALLBACK"
-    printf "%s\n" "$CONTEXT_WINDOW"
-    printf "%s\n\n" "$COMPACT_LIMIT"
-    printf "[tui]\n%s\n\n" "$STATUS_LINE"
-    printf "[features]\n%s\n" "$HOOKS_FEATURE"
-  } > "$CONFIG"; then
-    report "codex/config.toml" "CREATED" "managed defaults"
-  else
-    report "codex/config.toml" "FAILED" "could not create config"
-    mark_issue
-  fi
-}
-
-# Codex gets one dispatcher entry per registry event instead of a copy of the
-# registry: it runs every matching hook concurrently and has no `if` field, so
-# ordering and filtering live in hooks/lib/dispatch.sh. A file whose commands
-# all call this repo's dispatcher is ours and is regenerated when the registry
-# changes; anything else is a user file and needs --adopt.
-CODEX_HOOK_EVENTS='["PreToolUse", "PostToolUse", "SessionStart", "SessionEnd"]'
-
-manage_codex_hooks() {
-  HOOKS_FILE="$CODEX_DIR/hooks.json"
-  DISPATCHER="$REPO/hooks/lib/dispatch.sh"
-  TRUST_NOTE="review and trust it in Codex"
-
-  if ! command -v jq >/dev/null 2>&1; then
-    report "codex/hooks.json" "FAILED" "jq is required to read the hook registry"
-    mark_issue
-    return
-  fi
-
-  # The dispatcher runs an event's hooks in sequence, so its budget is the sum
-  # of theirs, with Claude's 60-second default for a hook that sets none.
-  if ! EXPECTED=$(jq --arg d "$DISPATCHER" --argjson events "$CODEX_HOOK_EVENTS" '
-    (.hooks // {}) as $h
-    | [$events[] | select(($h[.] // []) | length > 0)]
-    | if length == 0 then empty else
-        {hooks: (map({key: ., value: [{hooks: [{
-          type: "command",
-          command: (($d | @sh) + " " + .),
-          timeout: ([$h[.][].hooks[]? | .timeout // 60] | add)
-        }]}]}) | from_entries)}
-      end
-  ' "$REPO/settings.json" 2>/dev/null); then
-    report "codex/hooks.json" "FAILED" "cannot parse $REPO/settings.json"
-    mark_issue
-    return
-  fi
-
-  if [ -z "$EXPECTED" ]; then
-    report "codex/hooks.json" "OK" "registry has no Codex events"
-    return
-  fi
-  if [ ! -x "$DISPATCHER" ]; then
-    report "codex/hooks.json" "MISSING-SRC" "$DISPATCHER"
-    mark_issue
-    return
-  fi
-  if [ -L "$HOOKS_FILE" ] || { [ -e "$HOOKS_FILE" ] && [ ! -f "$HOOKS_FILE" ]; }; then
-    report "codex/hooks.json" "REFUSED" "must be a regular file"
-    mark_issue
-    return
-  fi
-
-  HOOKS_STATE="missing"
-  if [ -f "$HOOKS_FILE" ]; then
-    if [ "$(jq -S . "$HOOKS_FILE" 2>/dev/null)" = "$(printf '%s\n' "$EXPECTED" | jq -S .)" ]; then
-      report "codex/hooks.json" "OK" "dispatcher registered"
-      return
-    fi
-    if jq -e --arg d "$DISPATCHER" '
-      [.hooks[]?[]?.hooks[]?.command] | length > 0 and all(startswith($d | @sh))
-    ' "$HOOKS_FILE" >/dev/null 2>&1; then
-      HOOKS_STATE="stale"
-    else
-      HOOKS_STATE="foreign"
-    fi
-  fi
-
-  if [ "$MODE" = "check" ]; then
-    case "$HOOKS_STATE" in
-      missing) report "codex/hooks.json" "MISSING" "would register the hook dispatcher" ;;
-      stale) report "codex/hooks.json" "STALE" "registry events changed" ;;
-      foreign) report "codex/hooks.json" "CONFLICT" "user hooks file (requires --adopt)" ;;
-    esac
-    mark_issue
-    return
-  fi
-  if [ "$HOOKS_STATE" = "foreign" ] && [ "$ADOPT" -eq 0 ]; then
-    report "codex/hooks.json" "REFUSED" "user hooks file; re-run with --adopt"
-    mark_issue
-    return
-  fi
-
-  HOOKS_DETAIL="$TRUST_NOTE"
-  if [ "$HOOKS_STATE" != "missing" ]; then
-    HOOKS_BACKUP=$(next_backup "$HOOKS_FILE")
-    if ! mv "$HOOKS_FILE" "$HOOKS_BACKUP"; then
-      report "codex/hooks.json" "FAILED" "could not create backup"
-      mark_issue
-      return
-    fi
-    HOOKS_DETAIL="$TRUST_NOTE; backup: $HOOKS_BACKUP"
-  fi
-  if ensure_parent "$HOOKS_FILE" && printf '%s\n' "$EXPECTED" > "$HOOKS_FILE"; then
-    case "$HOOKS_STATE" in
-      missing) report "codex/hooks.json" "CREATED" "$HOOKS_DETAIL" ;;
-      stale) report "codex/hooks.json" "UPDATED" "$HOOKS_DETAIL" ;;
-      foreign) report "codex/hooks.json" "ADOPTED" "$HOOKS_DETAIL" ;;
-    esac
-  else
-    report "codex/hooks.json" "FAILED" "could not write hooks file"
-    mark_issue
-  fi
-}
+# Hosts reach this script through linked dirs, so resolve file links too
+# before finding lib/ beside the real script.
+SELF="$0"
+while [ -L "$SELF" ]; do
+  SELF_LINK=$(readlink "$SELF")
+  case "$SELF_LINK" in
+    /*) SELF="$SELF_LINK" ;;
+    *) SELF="$(dirname "$SELF")/$SELF_LINK" ;;
+  esac
+done
+CODEX_LIB="$(cd "$(dirname "$SELF")" && pwd)/lib/codex-config.sh"
 
 printf "%-34s %-13s %s\n" "PATH" "STATE" "DETAIL"
 printf "%-34s %-13s %s\n" "----" "-----" "------"
@@ -641,7 +276,7 @@ fi
 # CLAUDE.md slot carries it. Always-loaded rules come from the linked rules/.
 if host_enabled claude; then
   for CLAUDE_DIR in $CLAUDE_DIRS; do
-    TAG="$(printf %s "$CLAUDE_DIR" | sed "s#^$HOME#~#")"
+    TAG=$(home_tag "$CLAUDE_DIR")
     while IFS='|' read -r NAME RELATIVE; do
       [ -n "$NAME" ] || continue
       manage_link "$TAG/$NAME" "$CLAUDE_DIR/$NAME" "$REPO/$RELATIVE"
@@ -656,6 +291,7 @@ scripts|scripts
 docs|docs
 references|references
 templates|templates
+mods|mods
 statusline.sh|scripts/statusline.sh
 pull_request_template.md|.github/pull_request_template.md
 EOF
@@ -664,16 +300,19 @@ fi
 
 if host_enabled codex; then
   manage_link "codex/AGENTS.md" "$CODEX_DIR/AGENTS.md" "$REPO/AGENTS.md"
-  manage_codex_config
-  manage_codex_hooks
+  # shellcheck source=lib/codex-config.sh
+  if [ -f "$CODEX_LIB" ] && . "$CODEX_LIB"; then
+    manage_codex_config
+    manage_codex_hooks
+  else
+    report "codex/config.toml" "MISSING-SRC" "$CODEX_LIB"
+    mark_issue
+  fi
 fi
 
 if host_enabled pi; then
   for PI_DIR in $PI_DIRS; do
-    TAG="$PI_DIR"
-    case "$TAG" in
-      "$HOME"/*) TAG="~${TAG#"$HOME"}" ;;
-    esac
+    TAG=$(home_tag "$PI_DIR")
     manage_link "$TAG/AGENTS.md" "$PI_DIR/AGENTS.md" "$REPO/AGENTS.md"
     manage_link "$TAG/extensions" "$PI_DIR/extensions" "$REPO/pi/extensions"
     # A dir whose path names the personal profile gets the personal startup

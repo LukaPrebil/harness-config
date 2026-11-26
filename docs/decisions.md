@@ -8,16 +8,16 @@ The design decisions this config still runs on. Each entry states the choice and
 
 - The Workflow section of `AGENTS.md` names five phases: Research, Grill, Spec and plan, Implement, Summarize. Each phase has a trigger, such as unfamiliar code for Research or checkable criteria for Spec and plan.
 - The request's intent picks the phases, so a review or an explanation skips planning and implementation.
-- The grill aligns through real-time questions instead of an annotated plan document.
-- Each phase hands off explicitly. The user's "ready" at the end of the grill, or approval of the spec, is the approval gate.
-- The grill writes domain terms to `CONTEXT.md` and a short plan to `.claude/state/plans/`. It never writes an ADR.
+- The grill aligns through real-time questions instead of an annotated plan document. An annotated plan mixes domain terms, decisions, and task steps in one file, and each round is a slow write, read, and annotate cycle. The grill settles one decision per answer while the user is present.
+- Each phase hands off explicitly. The grill ends when the user confirms a shared understanding, and approval of the spec gates implementation.
+- The grill writes domain terms to `CONTEXT.md` and a short plan to `.claude/state/plans/`. It never writes an ADR. The glossary grows across sessions, while the plan is discarded once the work ships.
 - Trivial changes, such as typos, version bumps, and config tweaks, skip the grill.
 - Cost: the grill needs the user present to answer.
 
 ### No cross-session repo lock
 
-- The config has no lock between sessions. Concurrent sessions run in different repos, and the old lock never caught a real collision.
-- Worktrees serve parallel teammates and personal preference. Nothing forces them.
+- The config has no lock between sessions. Concurrent sessions run in different repos, so the same-checkout race a lock prevents does not occur.
+- Worktrees serve parallel teammates and personal preference. Rules and skills ask for them, and no hook forces them.
 - Revisit if two long-lived sessions start sharing one checkout.
 
 ## Agents
@@ -25,12 +25,12 @@ The design decisions this config still runs on. Each entry states the choice and
 ### Spawn personas as subagents
 
 - A specialized task spawns the matching persona through the Agent tool. Persona files never load into the main conversation.
-- Persona text in the main thread cost 3-15K tokens and biased unrelated work later in the session.
+- Persona text in the main thread costs thousands of tokens and biases unrelated work later in the session.
 - `rules/agent-routing.md` holds one routing row per routed persona. Doc Reader has none, because only `/document review` spawns it.
 
 ### Lean personas that inherit the rules
 
-- Personas are short spawn-time briefs: role, working method, repo-specific guardrails, red flags, and output format. [`personas.md`](personas.md) has the skeleton.
+- Personas are short spawn-time briefs: role, working method, repo-specific guardrails, red flags, and output format. [Personas](personas.md) has the skeleton.
 - A persona never restates `rules/`. Custom subagents already receive the user `CLAUDE.md`, which links to `AGENTS.md`, and the always-loaded rules.
 - Advisory personas drop Edit and Write through `tools:` frontmatter, so they cannot act as lane-mode writers.
 - Revisit if custom subagents stop receiving user instructions, for example through `omitClaudeMd`.
@@ -55,27 +55,48 @@ The design decisions this config still runs on. Each entry states the choice and
 ### Deliver a feature with one human gate
 
 - `deliver` runs research, spec, plan, the tests-first slice loop, spec verification, the PR, CI, and bot comments in one run.
-- The user approves the spec. After that the run stops only for these:
-  - replies to human reviewers
-  - force-push, merge, or a push to `main`
-  - production changes, deleting data, or changes outside the repo
-  - an architectural choice the spec left open
-- The author of code never grades it. The QA Expert writes and locks the tests, a review panel of advisory personas reviews, and the Spec Verifier records evidence at HEAD.
-- Hooks back the loop:
-  - The evidence gate blocks opening a PR until every automated criterion passes at HEAD.
-  - The test lock blocks implementers from editing locked tests.
-  - The reply gate blocks inline replies to human comments.
+- The user approves the spec, which is the one decision gate, and merges the PR. [Skills](skills.md#how-deliver-runs) lists the few other points where the run stops.
+- One gate is enough because the approved spec fixes the acceptance criteria. The Spec Verifier and the evidence gate check later stages against them.
+- The author of code never grades its own tests. The QA Expert writes and locks the tests, a domain persona or the session writes the code, a read-only review panel reviews, and the Spec Verifier records evidence at HEAD.
+- Three hooks back the loop, so a role cannot skip its limit. The evidence gate blocks a PR until every automated criterion passes at HEAD. The test lock blocks implementers from editing locked tests. The reply gate blocks inline replies to human comments.
+
+## Guardrails
+
+### Enforce hard limits in hooks, not instructions
+
+- A rule a script can check lives in `hooks/` and runs on the tool call. The model can forget an instruction, but the host runs a hook outside the model.
+- Each rule bullet ends with an [enforcement tag](rules.md#enforcement-tags), so a reader sees whether a hook backs it.
+- Only exit 2 blocks. A crash, a timeout, or any other exit lets the call run. Claude Code command hooks work this way, and `hooks/lib/dispatch.sh` and `pi/extensions/hook-bridge.ts` copy it, so a broken hook behaves the same on every host.
+- No registry entry sets Claude Code's `onFailure: "block"`, which would make a failed or timed-out hook block the call.
+- Cost: a broken hook enforces nothing until someone notices.
+
+### Hooks run only from the global copy
+
+- Each registry command runs `~/.claude/hooks/<name>`, which links to the main checkout. An opened repo cannot replace a gate with its own `hooks/` copy, and a worktree runs the main checkout's hooks.
+- Cost: a hook edit takes effect only once it reaches the main checkout, so its `tests/*.sh` suite or `npm test` verifies it first.
+
+### The deny list adds friction, not a boundary
+
+- One literal list in `settings.json` blocks the same commands and paths on every host, such as `rm -rf`, force-pushes, and reads of secrets.
+- Literal patterns miss variants such as `rm -fr`, and a `Read` deny never stopped a CLI from reading its own credentials. This fork leaves Claude Code's OS sandbox off, so the deny list and hooks slow a mistake down but do not contain it.
+- Unattended work on any host still needs an external boundary, as [setup](setup.md#pi) notes for Pi.
+
+### Cap the always-loaded text
+
+- `scripts/config-budget.sh` fails CI when `AGENTS.md` plus the always-loaded rules pass a word cap. Every word there competes for attention in every session.
+- Without a cap the surface grows one reasonable bullet at a time. Raising the cap is an edit to the script, reviewed with the rule that needs it.
+- [How it works](architecture.md#context-budget) says where new guidance goes instead.
 
 ## Skills
 
 ### Vendor and adapt upstream skills
 
-- Upstream skills are adapted, not copied. Each names its upstream, usually in a `> Source:` line, and drifts from upstream on purpose.
+- Upstream skills are adapted, not copied. Each names its upstream, usually in a `> Source:` line, and drifts from upstream on purpose. Here orchestration is model-invoked, while upstream makes the user type each stage, so verbatim copies would conflict.
 - Orchestration skills stay model-invoked, so the model enters workflow phases on its own. `wayfinder` and `deliver` are the exceptions: a long run starts only when the user asks.
-- Upstream's user-invoked `to-spec` and `implement` stages are not adopted. `to-tickets` was adopted as the model-invoked `to-issues`, then dropped in the 2026-11-21 skills audit because no issue tracker is in use.
+- Upstream's user-invoked `to-spec` and `implement` stages are not adopted, because they exist to let the user sequence stages by hand. `to-tickets` was adopted as the model-invoked `to-issues`, then dropped in the 2026-11-21 skills audit because no issue tracker is in use.
 - Reusable disciplines merge into an existing skill, such as `build` or `review-pr`, when one fits. The 2026-11-21 audit merged `test` into `build` the same way.
 - `wayfinder` tracks multi-session efforts in files under `.claude/state/`, because this setup runs no issue tracker.
-- Re-vendoring is manual. No upstream commit is pinned.
+- Re-vendoring is manual. No upstream commit is pinned, because each sync repeats the judgment of what to adapt.
 
 ### Audit against usage (2026-11-21)
 
@@ -89,12 +110,12 @@ The design decisions this config still runs on. Each entry states the choice and
 
 ### One instruction file and skill library for every host
 
-- `AGENTS.md` holds the shared instructions and `skills/` the shared skills for Claude Code, Codex, and Pi.
+- `AGENTS.md` holds the shared instructions and `skills/` the shared skills for Claude Code, Codex, and Pi. Guidance copied per host drifts apart.
 - `scripts/setup-hosts.sh` links each host's native path to the same files.
 - Claude Code has no user-level `AGENTS.md`, so `~/.claude/CLAUDE.md` links to it.
 - Claude Code loads `rules/` natively through `~/.claude/rules`. Other hosts reach it through the `rulebook` skill.
 - Tool hooks run on every host from one registry in `settings.json`. Claude Code runs it natively. Codex (through a generated `~/.codex/hooks.json`) and Pi (through the `hook-bridge` extension) call `hooks/lib/dispatch.sh`, so each check stays one script.
-- Session hooks differ by host. Codex gets `SessionStart` and `SessionEnd` but no `Notification`. Pi runs its session work in its own extensions.
+- Session hooks differ by host. Codex and Pi get `SessionStart` and `SessionEnd` through the dispatcher, but no `Notification`. A hook that fits only Claude Code runs when `AGENT_HOOK_HOST` is unset.
 - The deny list stays in `settings.json`. Claude Code enforces it natively. Pi enforces a policy that the `permission-gate` extension derives from it for the pinned `pi-permission-system` package. `hooks/deny-gate.sh` adds it for Codex and blocks shell commands that name a denied path on every host.
 - Teammate mechanics stay host-specific.
 - Shared skills keep Claude notation, and `AGENTS.md` maps it for the other hosts.

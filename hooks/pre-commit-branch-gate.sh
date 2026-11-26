@@ -1,46 +1,55 @@
 #!/bin/bash
 # Pre-commit branch gate.
-# Blocks `git commit` when HEAD is on main or master.
+# Blocks `git commit` when HEAD is on main or master, and when the commit
+# targets a directory that is not a git repo, since its branch is unknown.
 # PreToolUse hook for Bash(git commit *) and Bash(git -C *). Exit 2 blocks the
 # action and feeds the message back to Claude as a tool result.
 # Bypass with SKIP_COMMIT_BRANCH_GATE=1 in the environment.
 
 # shellcheck source=lib/resolve-repo.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-repo.sh"
+# shellcheck source=lib/once.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/once.sh"
+# shellcheck source=lib/husky-hooks.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/husky-hooks.sh"
+# shellcheck source=lib/hook.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/hook.sh"
 
-INPUT=$(cat)
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+hook_read
+first_run_for_call "$INPUT" pre-commit-branch-gate || exit 0
 
 case "$COMMAND" in
-  *"git commit --help"*|*"git commit -h"*) exit 0 ;;
-  *"git commit"*|*"git -C "*) ;;
+  *git*) ;;
   *) exit 0 ;;
 esac
+parse_git_command "$COMMAND" "$CWD" commit || exit 0
+git_args_ask_help && exit 0
 
-[ "$SKIP_COMMIT_BRANCH_GATE" = "1" ] && exit 0
+DIR=$GIT_REPO_DIR
 
-# `git -C <path> commit` never contains the literal "git commit", so a command
-# without either is not ours to gate.
-case "$COMMAND" in
-  *"git commit"*) ;;
-  *) printf '%s\n' "$COMMAND" | grep -q 'git -C  *[^ ]*  *commit' || exit 0 ;;
-esac
+# A new worktree's husky hooks must exist before its first commit, or git
+# skips pre-commit and commit-msg for it. Runs before the bypass, which
+# allows a commit to main and does not turn off the repo's own hooks.
+TOP=$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null)
+[ -n "$TOP" ] && restore_husky_hooks "$TOP" "$(git -C "$DIR" config --local --get core.hooksPath 2>/dev/null)"
 
-CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
-DIR=$(resolve_repo_dir "$COMMAND" "$CWD" commit)
-BRANCH=$(git -C "$DIR" rev-parse --abbrev-ref HEAD 2>/dev/null)
+hook_bypass SKIP_COMMIT_BRANCH_GATE && exit 0
 
-# Not in a git repo, or detached HEAD - let it through. Caller handles their own state.
-[ -z "$BRANCH" ] && exit 0
-[ "$BRANCH" = "HEAD" ] && exit 0
+if ! git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  hook_block pre-commit-branch-gate "" \
+    "$DIR is not a git repo, so the commit's branch cannot be checked." \
+    "Run the commit from inside the repo, or name it with git -C <repo>."
+fi
+
+# Detached HEAD prints nothing: no branch to protect.
+BRANCH=$(git -C "$DIR" branch --show-current 2>/dev/null)
 
 case "$BRANCH" in
   main|master)
-    echo "[pre-commit-branch-gate] Refusing to commit directly to '$BRANCH'." >&2
-    echo "Create a feature branch first, e.g.:" >&2
-    echo "  git checkout -b <type>/<short-description>" >&2
-    echo "(Bypass: SKIP_COMMIT_BRANCH_GATE=1)" >&2
-    exit 2
+    hook_block pre-commit-branch-gate SKIP_COMMIT_BRANCH_GATE \
+      "Refusing to commit directly to '$BRANCH'." \
+      "Create a feature branch first, e.g.:" \
+      "  git checkout -b <type>/<short-description>"
     ;;
 esac
 

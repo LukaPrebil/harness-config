@@ -26,22 +26,13 @@ jobs:
     runs-on: "${{ vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}"
     timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: domengabrovsek/github-actions/.github/actions/checkout@main
+      - name: Check out and set up Node
+        uses: domengabrovsek/github-actions/.github/actions/setup-node-npm@main
+        with:
+          install: 'false'
 
       - name: Check always-loaded rule budget
-        run: ./scripts/config-budget.sh
-
-  prose:
-    name: Prose Gate
-    runs-on: "${{ vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}"
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: domengabrovsek/github-actions/.github/actions/checkout@main
-
-      - name: Test the prose gate and scan the markdown corpus
-        run: bash hooks/prose-gate.test.sh
+        run: npm run check:budget
 
   tests:
     name: Extension Tests
@@ -56,78 +47,48 @@ jobs:
       - name: Run pi extension tests
         run: npm test
 
+  typecheck:
+    name: Type Check
+    runs-on: "${{ vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}"
+    timeout-minutes: 10
+    steps:
+      - name: Check out and set up Node
+        uses: domengabrovsek/github-actions/.github/actions/setup-node-npm@main
+        with:
+          install: 'false'
+
+      # npm ci also installs the Pi peer packages from the lockfile, so tsc checks against their real types.
+      - name: Type-check TypeScript
+        run: npm ci && npm run typecheck
+
   config:
     name: Config Integrity
     runs-on: "${{ vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}"
     timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: domengabrovsek/github-actions/.github/actions/checkout@main
+      - name: Check out and set up Node
+        uses: domengabrovsek/github-actions/.github/actions/setup-node-npm@main
+        with:
+          install: 'false'
 
       - name: Check tracked configuration
-        run: ./scripts/config-integrity.sh
+        run: npm run check:config
 
       - name: Lint shell scripts
-        run: ./scripts/shellcheck-all.sh
+        run: npm run lint:shell
 
   shell-tests:
     name: Shell Tests
     runs-on: "${{ vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}"
     timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: domengabrovsek/github-actions/.github/actions/checkout@main
+      - name: Check out and set up Node
+        uses: domengabrovsek/github-actions/.github/actions/setup-node-npm@main
+        with:
+          install: 'false'
 
-      - name: Test the multi-host bootstrap
-        run: bash tests/setup-hosts.sh
-
-      - name: Test the drift check
-        run: bash tests/symlink-check.sh
-
-      - name: Check shared paths resolve
-        run: bash tests/shared-paths.sh
-
-      - name: Test git hook repo resolution
-        run: bash tests/resolve-repo.sh
-
-      - name: Test the worktree prune verdicts
-        run: bash tests/worktree-prune.sh
-
-      - name: Test checkout convergence
-        run: bash tests/checkout-converge.sh
-
-      - name: Test the status line
-        run: bash tests/statusline.sh
-
-      - name: Test the herdr pane context hook
-        run: bash tests/herdr-pane-context.sh
-
-      - name: Test the host-neutral hook dispatcher
-        run: bash tests/dispatch.sh
-
-      - name: Test the commit gates
-        run: bash tests/commit-gates.sh
-
-      - name: Test the pre-push gate
-        run: bash tests/pre-push-gate.sh
-
-      - name: Test the test lock
-        run: bash tests/test-lock.sh
-
-      - name: Test the evidence gate
-        run: bash tests/evidence-gate.sh
-
-      - name: Test the PR gates
-        run: bash tests/pr-gates.sh
-
-      - name: Test the PR test gate
-        run: bash tests/pre-pr-test-gate.sh
-
-      - name: Test the per-edit hooks
-        run: bash tests/post-edit-hooks.sh
-
-      - name: Test the PR reply gate
-        run: bash tests/pr-reply-gate.sh
+      - name: Run every shell suite
+        run: npm run test:shell
 
       - name: Test the PR readiness check and watch hook
         run: bash tests/pr-ready.sh
@@ -143,8 +104,8 @@ jobs:
     needs:
       - lint
       - budget
-      - prose
       - tests
+      - typecheck
       - shell-tests
       - config
     runs-on: "${{ vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}"
@@ -155,8 +116,8 @@ jobs:
           results=(
             "${{ needs.lint.result }}"
             "${{ needs.budget.result }}"
-            "${{ needs.prose.result }}"
             "${{ needs.tests.result }}"
+            "${{ needs.typecheck.result }}"
             "${{ needs.shell-tests.result }}"
             "${{ needs.config.result }}"
           )

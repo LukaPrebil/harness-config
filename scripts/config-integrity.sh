@@ -12,6 +12,10 @@
 # autoMode environment inventory (hostnames, domains, bucket and secret paths).
 set -euo pipefail
 
+case "${1:-}" in
+  -h|--help) sed -n '2,/^[^#]/s/^# \{0,1\}//p' "$0"; exit 0 ;;
+esac
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
@@ -29,7 +33,8 @@ note_fail() {
 
 echo "== JSON parses =="
 while IFS= read -r f; do
-  if python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f" 2>/dev/null; then
+  # Slurp so an empty file or several concatenated values fail: one document is required.
+  if jq -es 'length == 1' "$f" >/dev/null 2>&1; then
     printf '  ok   %s\n' "$f"
   else
     printf '  BAD  %s\n' "$f"
@@ -45,16 +50,8 @@ echo "== no ephemeral state committed =="
 # leak. Without the filter the two are identical, which is the case CI runs.
 for f in "${FILTERED_FILES[@]}"; do
   git cat-file -e "HEAD:$f" 2>/dev/null || continue
-  blob=$(mktemp "${TMPDIR:-/tmp}/config-integrity.XXXXXX")
-  git cat-file blob "HEAD:$f" > "$blob"
-  found=$(python3 - "$blob" "${EPHEMERAL_KEYS[@]}" <<'PY'
-import json, sys
-path, keys = sys.argv[1], sys.argv[2:]
-data = json.load(open(path))
-print(" ".join(k for k in keys if k in data))
-PY
-)
-  rm -f "$blob"
+  found=$(git cat-file blob "HEAD:$f" |
+    jq -r '[$ARGS.positional[] as $k | select(has($k)) | $k] | join(" ")' --args "${EPHEMERAL_KEYS[@]}")
   if [ -n "$found" ]; then
     printf '  BAD  %s carries %s\n' "$f" "$found"
     note_fail "$f carries ephemeral key(s): $found."

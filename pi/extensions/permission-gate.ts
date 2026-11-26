@@ -2,18 +2,17 @@
  * permission-gate - derives pi's permission policy from the harness deny list.
  *
  * The mechanical enforcement itself is the adopted @gotgenes/pi-permission-system
- * package (pinned in pi/settings.json). This extension no longer gates tool
- * calls; it is the translation step that keeps that package's config a Derived
- * policy (CONTEXT.md): regenerated from the permissions block of the tracked
- * root settings.json at every session start, never hand-edited.
+ * package (pinned in pi/settings.json). This extension is the translation step
+ * that keeps that package's config a Derived policy (CONTEXT.md): regenerated
+ * from the permissions block of the tracked root settings.json at every
+ * session start, never hand-edited.
  *
  * Translation (deny list -> gotgenes surfaces), deny-only, never "ask":
  *
  *   Read(...)   -> path_read  (cross-cutting: read tool, bash reads, ls/find/grep)
  *   Edit/Write  -> path_write (cross-cutting: write/edit tools, redirects)
- *   Bash(...)   -> bash       (their tree-sitter command enumeration is a
- *                              superset of our old segment matching)
- *   mcp__srv__t -> mcp        (previously a skip notice; now enforced)
+ *   Bash(...)   -> bash       (tree-sitter command enumeration)
+ *   mcp__srv__t -> mcp
  *
  * The universal fallback is "allow": unmatched actions pass, so semantics stay
  * deny-wins/default-allow and headless -p/json/rpc sessions never prompt.
@@ -30,61 +29,31 @@
  *
  * Module top imports only node builtins so `node --test` can exercise the
  * pure helpers without resolving pi packages; the factory resolves
- * @earendil-works/pi-coding-agent dynamically at runtime.
+ * @earendil-works/pi-coding-agent and the shared rule loader in
+ * hooks/lib/deny-rules.ts dynamically at runtime.
  */
 
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import type { GateConfig } from '../../hooks/lib/deny-rules.ts';
+import { checkoutPath } from './lib/checkout.ts';
+
+type DenyRulesModule = typeof import('../../hooks/lib/deny-rules.ts');
 
 /* ---------------------------------------------------------------------------
  * Pure rule engine
  * --------------------------------------------------------------------------- */
 
-export type RuleFamily = 'path-read' | 'path-write' | 'bash' | 'mcp';
-
-export interface DenyRule {
-  family: RuleFamily;
-  /** Pattern inside the Claude rule: a path glob, a command pattern, or an MCP rule id. */
-  pattern: string;
-  /** Full source rule as written in the deny list, e.g. a Read rule for .env. */
-  source: string;
-}
-
-export type GateConfig =
-  | { status: 'ok'; rules: DenyRule[]; skipped: string[]; allowCount: number }
-  | { status: 'missing'; reason: string }
-  | { status: 'empty'; reason: string }
-  | { status: 'error'; reason: string };
-
-const RULE_RE = /^(Read|Edit|Write|Bash)\((.*)\)$/s;
+/* Same shape as the classifier's MCP pattern in deny-rules.ts, split into server and tool. */
 const MCP_RE = /^mcp__(.+)__([^_]+(?:_[^_]+)*)$/;
-
-/** Classify one Claude permission rule; undefined when pi cannot enforce it. */
-export function classifyRule(source: string): { family: RuleFamily; pattern: string } | undefined {
-  const trimmed = source.trim();
-  const match = RULE_RE.exec(trimmed);
-  if (match !== null) {
-    const verb = match[1];
-    const pattern = match[2];
-    if (verb === 'Bash') return { family: 'bash', pattern };
-    if (verb === 'Read') return { family: 'path-read', pattern };
-    // Edit and Write both bind writes: file-tool rules enforce a superset.
-    if (verb === 'Edit' || verb === 'Write') return { family: 'path-write', pattern };
-    return undefined;
-  }
-  if (MCP_RE.test(trimmed)) return { family: 'mcp', pattern: trimmed };
-  return undefined;
-}
 
 /**
  * Translate a Claude path glob to a gotgenes wildcard pattern. Their `*`
  * crosses `/` (anchored regex with the `s` flag), so collapsing `**` to `*`
- * preserves coverage; a trailing double-star loses only the directory entry itself,
- * which is narrower than the old gate for reads of the bare directory and a
- * superset for everything else (ls/find/grep were never gated before).
+ * preserves coverage; a trailing double-star loses only the directory entry
+ * itself.
  */
 export function translatePathPattern(pattern: string): string {
   return pattern.replaceAll('**', '*');
@@ -120,7 +89,6 @@ function denyMap(patterns: string[]): SurfaceMap {
  * rules only. A merged `path` surface would block writes absent from the source.
  */
 export function derivePermissionPolicy(config: Extract<GateConfig, { status: 'ok' }>): {
-  universal: 'allow';
   pathRead: SurfaceMap;
   pathWrite: SurfaceMap;
   bash: SurfaceMap;
@@ -140,7 +108,6 @@ export function derivePermissionPolicy(config: Extract<GateConfig, { status: 'ok
     }
   }
   return {
-    universal: 'allow',
     pathRead: denyMap(read),
     pathWrite: denyMap(write),
     bash: denyMap(bash),
@@ -163,88 +130,19 @@ export function buildPolicyDocument(policy: ReturnType<typeof derivePermissionPo
   permission: Record<string, unknown>;
   promptNotifications: string[];
 } {
-  const surfaces: Record<string, unknown> = { '*': policy.universal };
+  const surfaces: Record<string, unknown> = { '*': 'allow' };
   if (Object.keys(policy.pathRead).length > 0) surfaces.path_read = policy.pathRead;
   if (Object.keys(policy.pathWrite).length > 0) surfaces.path_write = policy.pathWrite;
   /* The package applies the last matching bash rule, so the catch-all goes first
      and every deny after it still wins. Stating it explicitly silences the
      package's warning about bash inheriting the top-level allow. */
-  surfaces.bash = { '*': policy.universal, ...policy.bash };
+  surfaces.bash = { '*': 'allow', ...policy.bash };
   if (Object.keys(policy.mcp).length > 0) surfaces.mcp = policy.mcp;
   return { $schema: PERMISSIONS_SCHEMA_URL, permission: surfaces, promptNotifications: [...PROMPT_NOTIFICATIONS] };
 }
 
 export function serializePolicyDocument(document: ReturnType<typeof buildPolicyDocument>): string {
   return `${JSON.stringify(document, null, 2)}\n`;
-}
-
-/** Load and classify the permissions block; never throws. */
-export function loadGateConfig(settingsPath: string): GateConfig {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(settingsPath, 'utf8'));
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { status: 'missing', reason: `permission source not found: ${settingsPath}` };
-    }
-    const message = err instanceof Error ? err.message : String(err);
-    return { status: 'error', reason: `permission source unreadable: ${message}` };
-  }
-  if (typeof parsed !== 'object' || parsed === null) {
-    return { status: 'empty', reason: 'permission source is not an object' };
-  }
-  const permissions = (parsed as { permissions?: unknown }).permissions;
-  if (typeof permissions !== 'object' || permissions === null) {
-    return { status: 'empty', reason: 'no permissions block' };
-  }
-  const deny = (permissions as { deny?: unknown }).deny;
-  if (!Array.isArray(deny) || deny.length === 0) {
-    return { status: 'empty', reason: 'deny list absent or empty' };
-  }
-  const allow = (permissions as { allow?: unknown }).allow;
-  const allowCount = Array.isArray(allow) ? allow.length : 0;
-
-  const rules: DenyRule[] = [];
-  const skipped: string[] = [];
-  for (const source of deny) {
-    if (typeof source !== 'string') {
-      skipped.push(String(source));
-      continue;
-    }
-    const classified = classifyRule(source);
-    if (classified === undefined) {
-      skipped.push(source);
-      continue;
-    }
-    rules.push({ ...classified, source });
-  }
-  if (rules.length === 0) {
-    return { status: 'empty', reason: 'deny list translates to zero pi rules' };
-  }
-  return { status: 'ok', rules, skipped, allowCount };
-}
-
-export type SourceSelection =
-  | { status: 'ok'; path: string; config: Extract<GateConfig, { status: 'ok' }> }
-  | { status: 'unavailable'; reason: string };
-
-/**
- * First candidate that exists and carries a permissions block wins. A parseable
- * settings file without permissions (pi's own settings.json, for instance) is
- * not the permission source and is skipped, not fatal.
- */
-export function resolvePermissionSource(candidates: string[]): SourceSelection {
-  let unavailableReason: string | undefined;
-  for (const candidate of candidates) {
-    if (!existsSync(candidate)) continue;
-    const config = loadGateConfig(candidate);
-    if (config.status === 'ok') return { status: 'ok', path: candidate, config };
-    unavailableReason = config.reason;
-  }
-  if (unavailableReason !== undefined) {
-    return { status: 'unavailable', reason: unavailableReason };
-  }
-  return { status: 'unavailable', reason: 'no permission source found in candidate paths' };
 }
 
 /* ---------------------------------------------------------------------------
@@ -256,23 +154,15 @@ const CONSUMER_DIR = 'pi-permission-system';
 
 export default async function (pi: ExtensionAPI) {
   const { getAgentDir } = await import('@earendil-works/pi-coding-agent');
+  /* Pi loads the module by its symlinked path and does not resolve it, so a
+   * static import of hooks/lib would miss the checkout. */
+  const { loadGateConfig }: DenyRulesModule = await import(
+    pathToFileURL(checkoutPath(import.meta.url, 'hooks/lib/deny-rules.ts')).href
+  );
 
   pi.on('session_start', (_event, ctx) => {
-    let moduleDir: string;
-    try {
-      moduleDir = dirname(realpathSync(fileURLToPath(import.meta.url)));
-    } catch {
-      moduleDir = dirname(fileURLToPath(import.meta.url));
-    }
-    /* Order: the tracked root settings.json next to the extension (symlinks
-     * resolved, i.e. the checkout), then Claude's config-dir symlink to the
-     * same tracked file, then the pi agent dir for standalone installs. */
-    const candidates = [
-      join(moduleDir, '../../settings.json'),
-      join(homedir(), '.claude', 'settings.json'),
-      join(getAgentDir(), 'settings.json'),
-    ];
-    const selection = resolvePermissionSource(candidates);
+    const sourcePath = checkoutPath(import.meta.url, 'settings.json');
+    const config = loadGateConfig(sourcePath);
 
     const failLoud = (message: string): void => {
       if (ctx.hasUI) {
@@ -283,8 +173,8 @@ export default async function (pi: ExtensionAPI) {
       }
     };
 
-    if (selection.status !== 'ok') {
-      failLoud(`Derived policy STALE (${selection.reason}); the permission system keeps the last generated config.`);
+    if (config.status !== 'ok') {
+      failLoud(`Derived policy STALE (${config.reason}); the permission system keeps the last generated config.`);
       return;
     }
 
@@ -292,8 +182,7 @@ export default async function (pi: ExtensionAPI) {
      * tracked file via the extensions symlink; it is also the path the
      * consumer resolves (<agent dir>/extensions/pi-permission-system/config.json). */
     const configPath = join(getAgentDir(), 'extensions', CONSUMER_DIR, 'config.json');
-    const document = buildPolicyDocument(derivePermissionPolicy(selection.config));
-    const serialized = serializePolicyDocument(document);
+    const serialized = serializePolicyDocument(buildPolicyDocument(derivePermissionPolicy(config)));
     let unchanged = false;
     try {
       const existing = existsSync(configPath) ? readFileSync(configPath, 'utf8') : '';
@@ -311,12 +200,12 @@ export default async function (pi: ExtensionAPI) {
 
     if (ctx.hasUI) ctx.ui.setWidget(WIDGET_ID, undefined);
 
-    const summary = [`derived ${selection.config.rules.length} deny rules from ${selection.path}`];
-    if (selection.config.skipped.length > 0) {
-      summary.push(`skipped ${selection.config.skipped.length} (no translation): ${selection.config.skipped.join(', ')}`);
+    const summary = [`derived ${config.rules.length} deny rules from ${sourcePath}`];
+    if (config.skipped.length > 0) {
+      summary.push(`skipped ${config.skipped.length} (no translation): ${config.skipped.join(', ')}`);
     }
-    if (selection.config.allowCount > 0) {
-      summary.push(`${selection.config.allowCount} allow rules inert (deny-wins)`);
+    if (config.allowCount > 0) {
+      summary.push(`${config.allowCount} allow rules inert (deny-wins)`);
     }
     summary.push(`policy -> ${configPath}${unchanged ? ' (unchanged)' : ''}`);
     if (ctx.hasUI) ctx.ui.notify(`Derived policy: ${summary.join('; ')}`, 'info');

@@ -8,7 +8,7 @@ A skill is a `skills/<name>/SKILL.md` file whose `description` says when to use 
 - Claude Code syncs each Claude account's skill library into `skills/synced/`, and the `~/.claude/skills` link puts those directories inside this checkout. `.gitignore` keeps them out of the repo.
 - A Pi Profile excludes the buckets another account synced, so one session loads one account's library. Claude Code has no skill filter and loads every bucket.
 - A **model-invoked** skill carries trigger phrases in its description, so the model enters it without being asked. 27 skills work this way.
-- A **user-invoked** skill sets `disable-model-invocation: true`, so only a typed `/name` starts it. `deliver`, `wayfinder`, and `wait-what` work this way, because a long run should start only when you ask for it.
+- A **user-invoked** skill sets `disable-model-invocation: true`, so only a typed `/name` starts it. `deliver`, `wayfinder`, and `wait-what` work this way. The first two start long runs, which should start only when you ask. `wait-what` says the last reply did not land, which only you can judge.
 - Shared skills use Claude Code notation: `/name`, `$ARGUMENTS`, `Agent`, and `SendMessage`. `AGENTS.md` maps each one to the equivalent on Codex and Pi.
 - A skill adapted from an upstream repo names its source, usually in a `> Source:` line. The copies drift from upstream on purpose, and re-syncing is manual.
 
@@ -36,7 +36,7 @@ Rows marked **user** start only when you type them.
 | --- | --- | --- |
 | `build` | model | Implements an approved plan with quality gates and a tests-first slice loop; its `TESTING.md` owns standalone test writing |
 | `deliver` | **user** | Runs a feature from spec to a merge-ready PR with one human gate |
-| `drive-fleet` | model | Drives several PRs to done under `/goal`, with worktree subagents doing the edits |
+| `drive-fleet` | model | Drives several PRs to done under `/goal`, with worktree subagents doing the edits, across sibling repos too |
 | `wizard` | model | Generates a bash wizard for steps only a human can do |
 
 ### Verify and ship
@@ -75,15 +75,15 @@ Rows marked **user** start only when you type them.
 | `summarize` | model | Writes a session diary, then prunes merged worktrees |
 | `handoff` | model | Compacts the conversation into a doc a fresh session can pick up |
 | `wait-what` | **user** | Restates the last reply in simpler terms |
-| `worktree` | model | Creates a worktree for the current task and switches into it |
-| `worktree-merge` | model | Removes a merged worktree and its local branch |
+| `worktree` | model | Creates a worktree under `.claude/worktrees/` for the current task and switches into it. `--repo <path>` creates it in another repo |
+| `worktree-merge` | model | Removes a merged worktree and its local branch, in this repo or at a given worktree path |
 | `worktrees` | model | Audits or prunes worktrees in this repo or across `~/dev` |
 
 ### Standards
 
 | Skill | Starts | Does |
 | --- | --- | --- |
-| `rulebook` | model | Routes Codex and Pi to the `rules/` file a task needs |
+| `rulebook` | model | Routes any host to the `rules/` file a task needs; Codex and Pi rely on it because they do not load `rules/` natively |
 
 ## How `/deliver` runs
 
@@ -92,7 +92,7 @@ Rows marked **user** start only when you type them.
 ![Deliver flow](diagrams/deliver-flow.png)
 *Source: [`deliver-flow.drawio`](diagrams/deliver-flow.drawio)*
 
-The diagram shows the stages top to bottom, the one approval in red, and the hooks that gate each stage on the right. The two loops on the left send a failed criterion or a red CI run back to the slice loop.
+The diagram shows the stages top to bottom: `/research` when the code is unfamiliar, `/spec`, the user's approval in red, `/worktree` and `/plan`, the `/build` slice loop, the Spec Verifier and `/verify-done`, `/mr`, then `/ci` and `/pr-comments`, and a final report. On the right, `pre-edit-test-lock.sh` gates the slice loop, the PR gates (`pre-pr-test-gate.sh`, `pre-pr-evidence-gate.sh`, `pre-pr-body-gate.sh`, `prose-gate.sh`) gate `/mr`, and `pre-pr-reply-gate.sh` gates comment replies. The two loops on the left send a failed criterion or a red CI run back to the slice loop.
 
 The run stops for you when:
 
@@ -125,4 +125,4 @@ After the last slice, the Spec Verifier runs each acceptance criterion's check a
 
 ## Where skills keep state
 
-Skills write their artifacts under `.claude/state/` in the project. [How it works](architecture.md#workflow-state) lists each path and who reads it.
+Skills write their artifacts under `.claude/state/` in the project. Per-branch run files, such as `tasks.md`, `tests.lock`, `evidence.md`, and `reply-drafts.md`, sit in `.claude/state/runs/<branch>/`. [How it works](architecture.md#workflow-state) lists each path and who reads it.

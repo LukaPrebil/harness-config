@@ -6,22 +6,24 @@ Every change lands through a pull request to `main`, and CI runs the same checks
 
 - **Edits are live.** Every linked host sees a change in the main checkout at once. Work in a worktree to keep an unfinished change out of other sessions.
 - **Run setup from the main checkout.** `setup-hosts.sh` links the repo it runs from. Run in a worktree, it points your hosts at that worktree. Set `AGENT_CONFIG_REPO` to run it elsewhere.
-- **Hooks run from the project first.** A session in this repo runs its own `hooks/` copy. Open a session in your worktree to try a hook change.
+- **Hooks run from `~/.claude/hooks`.** Every session runs the main checkout's hooks, never a project or worktree copy. Verify a hook change with its `tests/*.sh` suite or `npm test`, not in a live session.
 
 ## Add a rule
 
 1. Write the rule in the `rules/` file for its topic, or in a new file. End each bullet with its [enforcement tag](rules.md#enforcement-tags).
 2. Add `paths:` frontmatter when the rule applies only to some files. A rule without it loads in every Claude Code session.
 3. Add a row to the routing table in `skills/rulebook/SKILL.md` for a new file, so Codex and Pi can find it.
-4. Run `./scripts/config-budget.sh`. If the always-loaded surface passes its budget, scope the rule, move it into a skill, or back it with a hook.
+4. Add a new file to the table and counts in [rules](rules.md), and to the rule count in [how it works](architecture.md#the-pieces). No check compares these lists with `rules/`.
+5. Run `./scripts/config-budget.sh`. If the always-loaded surface passes its budget, scope the rule, move it into a skill, or back it with a hook.
 
 ## Add a hook
 
 1. Write `hooks/<name>.sh`. Exit 2 with a message on stderr to block; exit 0 to allow. Read a `SKIP_<NAME>` variable if a human may need to bypass it.
-2. Register it in `settings.json` under its event, with a `matcher`, an optional `if` pattern, and a timeout. Copy the command wrapper of an existing entry, so the project's copy wins over `~/.claude/hooks`.
-3. Add `tests/<name>.sh`, and add a step that runs it to the `shell-tests` job in `.github/workflows/pull-request.yml`.
-4. Change the tag of the rule it backs to `(hook)`.
-5. If you use Codex, run `bash scripts/setup-hosts.sh --apply --host codex` from the main checkout once the change is there. The generated `hooks.json` sums the hook timeouts of each event, so it goes stale when the registry changes.
+2. Make it pass `./scripts/shellcheck-all.sh`, which lints every tracked shell script at warning level.
+3. Register it in `settings.json` under its event, with a `matcher`, an optional `if` pattern, and a timeout. Copy the command wrapper of an existing entry, `HOOK="$HOME/.claude/hooks/<name>.sh"; [ -x "$HOOK" ] && exec "$HOOK"`. Never point a command at `$CLAUDE_PROJECT_DIR/hooks`, because any repo you open could then replace the hook. Timeouts are in seconds. [Hooks](hooks.md) describes the `if` pattern.
+4. Add `tests/<name>.sh`. Copy an existing one, such as `tests/commit-gates.sh`, which sources `tests/lib/harness.sh`, runs the hook on sample input, and asserts its exit code. CI runs every `tests/*.sh` file, so the suite needs no workflow change.
+5. Change the tag of the rule it backs to `(hook)`.
+6. If you use Codex, run `bash scripts/setup-hosts.sh --apply --host codex` from the main checkout once the change reaches it. The generated `hooks.json` sums the hook timeouts of each event, so it goes stale when the registry changes.
 
 [Hooks](hooks.md) describes the registry format and how `dispatch.sh` runs it on Codex and Pi.
 
@@ -30,7 +32,7 @@ Every change lands through a pull request to `main`, and CI runs the same checks
 1. Read `skills/write-a-skill/SKILL.md`, then write `skills/<name>/SKILL.md`. The `description` decides when the model loads it.
 2. Set `disable-model-invocation: true` only when the skill should start by typed command alone.
 3. Name shared files as `~/.agents/...`, never `~/.claude/...`. `tests/shared-paths.sh` fails when such a path does not exist in the checkout.
-4. Add the skill to the [cheatsheet](../CHEATSHEET.md) and to the catalog in [skills](skills.md).
+4. Add the skill to the [cheatsheet](../CHEATSHEET.md), to the catalog and counts in [skills](skills.md), and to the skill count in [how it works](architecture.md#the-pieces). No check compares these lists with `skills/`.
 
 ## Add a persona
 
@@ -38,6 +40,16 @@ Every change lands through a pull request to `main`, and CI runs the same checks
 2. Leave out `tools:` for a writer. List tools without Edit and Write for an advisory persona.
 3. Add a routing row to `rules/agent-routing.md`, then run `./scripts/config-budget.sh`, because that rule loads in every session.
 4. Add the persona to the tables in [personas](personas.md).
+
+## Add a mod
+
+A mod is a Claude Code plugin under `mods/`. `setup-hosts.sh` links the whole dir at `~/.claude/mods`, so a new mod needs no setup change.
+
+1. Write `mods/<name>/` with a `.claude-plugin/plugin.json` manifest. Copy the layout of `mods/pr-fleet/`.
+2. Add `~/.claude/mods/<name>` to `CLAUDE_CODE_PLUGIN_DIRS` in the `env` block of `settings.json`. Separate paths with `:`, as the [env var reference](https://code.claude.com/docs/en/env-vars#variables) says.
+3. Update the variable's value in [Claude Code environment](setup.md#claude-code-environment) and in the default-dir caveats under [scope a machine](setup.md#scope-a-machine).
+4. Run `claude plugin validate mods/<name>`, then `claude plugin test mods/<name>` when the mod has `tests/*.test.ts`. CI runs neither, so these are the only checks.
+5. Write `mods/<name>/README.md` and link it from the `mods/` entry under [What's inside](../README.md#whats-inside).
 
 ## Change the deny list
 
@@ -51,24 +63,37 @@ Edit `scripts/setup-hosts.sh`, update the link tables in [setup](setup.md), and 
 
 ## Run the checks
 
-CI runs these jobs on every pull request. Each job except Lint Markdown runs locally from the repo root.
+Run `npm ci`, then `npm run verify` from the repo root before you open a pull request. It runs every CI check except Lint Markdown. The CI jobs call the same npm scripts, so local and CI results match.
 
-| CI job | Local command | Checks |
+| CI job | npm script | Checks |
 | --- | --- | --- |
 | Lint Markdown | none; CI uses the shared markdownlint action | Every `*.md` file against `.markdownlint.json` |
-| Config Budget | `./scripts/config-budget.sh` | The always-loaded word and tag budgets |
-| Prose Gate | `bash hooks/prose-gate.test.sh` | Gate fixtures, then every tracked Markdown file |
+| Config Budget | `npm run check:budget` | The always-loaded word and tag budgets |
 | Extension Tests | `npm test` | `tests/*.test.ts`: the deny gate and the Pi extensions |
-| Config Integrity | `./scripts/config-integrity.sh` and `./scripts/shellcheck-all.sh` | JSON parses, no runtime keys committed, the git filter declared, shell lint |
-| Shell Tests | `for t in tests/*.sh; do bash "$t"; done` | Host setup, drift check, shared paths, dispatcher, and every gate |
+| Type Check | `npm run typecheck` | `tsc --noEmit` over `pi/extensions/`, `hooks/lib/*.ts`, and `tests/*.test.ts`, as `tsconfig.json` sets. The Pi peer packages in the lockfile supply their types, so run `npm ci` first |
+| Config Integrity | `npm run check:config` and `npm run lint:shell` | JSON parses, no runtime keys committed, the git filter declared, shell lint |
+| Shell Tests | `npm run test:shell` | Each `tests/*.sh` file: host setup, drift check, shared paths, dispatcher, status line, worktree pruning, every gate, and the prose gate fixtures plus every tracked Markdown file. `scripts/run-shell-tests.sh` runs the files in parallel, prints each log, and lists the failed ones at the end. Under GitHub Actions each log is a collapsible group |
 
-- The agent push gate runs only part of this table. `package.json` declares only a `test` script, so `pre-push-gate.sh` runs `npm test` and a critical-only `npm audit`. Run every command in the table before you push.
+- The agent push gate runs `npm run verify:fast`, which is `npm test` plus the config budget.
+- The agent PR gate blocks `gh pr create` and `gh pr ready` until `npm run verify` has passed at HEAD on a clean tree. Run it alone, in the foreground, so `post-verify-stamp.sh` records the pass. A draft PR skips the check until `gh pr ready`.
 - The push gate blocks a push from any Node checkout without `node_modules`, even though `npm test` here needs no install. Run `npm ci` in a new worktree first.
 - `shellcheck-all.sh` installs `shellcheck` through `apt-get` or `brew` when it is missing.
 - `npm test` needs Node.js 22.19 or later and no install step.
 - A `Gate` job passes only when every job above passed or was skipped. Branch protection requires `Gate`, so the required check stays stable when jobs change.
 
-## Review and notifications
+### Script conventions
+
+New scripts in `scripts/`, and scripts you touch, follow these rules. Some older scripts do not yet. `setup-hosts.sh` and `setup-symlinks.sh`, for example, print help through their own `usage` text.
+
+- A Bash script starts with `#!/bin/bash` and stays compatible with Bash 3.2, the macOS default.
+- A pass-or-fail check sets `set -euo pipefail`.
+- A script with several meaningful exit codes sets only `set -u`, so one failed command does not end it early. `pr-ready.sh` and `worktree-prune.sh` work this way.
+- `statusline.sh` stays POSIX `#!/bin/sh`, because it runs on every status line render.
+- A comment block under the shebang says what the script does, how to call it, and what its exit codes mean.
+- `--help` prints that block with `sed -n '2,/^[^#]/s/^# \{0,1\}//p' "$0"`. The block ends at the first line that is not a comment.
+
+## Review, dependencies, and notifications
 
 - **Reviewer.** `.github/workflows/reviewer.yml` calls the [shared reviewer](https://github.com/domengabrovsek/github-actions/blob/main/docs/workflows/reviewer.md). Claude reviews a PR when it opens, updates, or turns ready, comments inline, and answers the owner's replies in its threads. A fork PR gets one review each time the owner adds the `safe-to-review` label. The Claude token comes from AWS SSM through the role in the `REVIEWER_ROLE_ARN` variable, so the repo stores no secret.
+- **Dependencies.** `.github/dependabot.yml` opens one monthly pull request with every npm and GitHub Actions update, plus a grouped pull request per ecosystem for security fixes. A 7-day cooldown skips releases younger than a week.
 - **Notifications.** A repo webhook, managed outside this repo, sends PR, review, and comment events to Telegram. New pushes to an open PR send no ping.

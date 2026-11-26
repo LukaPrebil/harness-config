@@ -1,11 +1,11 @@
 /**
  * Tests for hooks/lib/deny-gate.ts: glob and path matching, command splitting,
- * the evaluation per tool, and the hook wrapper's exit codes.
+ * normalization, the evaluation per tool, and the hook wrapper's exit codes.
  */
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -16,10 +16,11 @@ import {
   commandGlobMatches,
   commandSegments,
   evaluate,
+  normalizeSegment,
   pathGlobToRegex,
   stripHeredocs,
 } from '../hooks/lib/deny-gate.ts';
-import { loadGateConfig, type DenyRule } from '../pi/extensions/permission-gate.ts';
+import { type DenyRule, loadGateConfig } from '../hooks/lib/deny-rules.ts';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const HOME = '/home/u';
@@ -104,10 +105,9 @@ describe('evaluate', () => {
     assert.equal(evaluate(bash('git commit -m "ignore .env"'), rules, { home: HOME }), undefined);
   });
 
-  it('applies Bash rules only when asked', () => {
-    assert.equal(evaluate(bash('cd x && sudo ls'), rules, { home: HOME }), undefined);
-    assert.equal(evaluate(bash('cd x && sudo ls'), rules, { home: HOME, bashRules: true })?.rule, 'Bash(sudo *)');
-    assert.equal(evaluate(bash("ssh h 'sudo ls'"), rules, { home: HOME, bashRules: true }), undefined);
+  it('applies Bash rules to each segment, not to quoted text', () => {
+    assert.equal(evaluate(bash('cd x && sudo ls'), rules, { home: HOME })?.rule, 'Bash(sudo *)');
+    assert.equal(evaluate(bash("ssh h 'sudo ls'"), rules, { home: HOME }), undefined);
   });
 
   it('checks edits and MCP tools', () => {
@@ -115,6 +115,160 @@ describe('evaluate', () => {
     assert.equal(evaluate(edit, rules, { home: HOME })?.subject, '/w/app/.env.local');
     assert.equal(evaluate({ tool_name: 'mcp__jira__getIssue' }, rules)?.rule, 'mcp__jira__*');
     assert.equal(evaluate({ tool_name: 'mcp__slack__post' }, rules), undefined);
+  });
+});
+
+describe('normalizeSegment', () => {
+  it('drops assignments, wrappers, program dirs, and git global options', () => {
+    assert.equal(normalizeSegment('FOO=1 BAR=2 git push -f'), 'git push -f');
+    assert.equal(normalizeSegment('command rm -rf x'), 'rm -rf x');
+    assert.equal(normalizeSegment('env -u X builtin exec /bin/rm -rf x'), 'rm -rf x');
+    assert.equal(normalizeSegment('time -p nice -n 5 nohup git push -f origin x'), 'git push -f origin x');
+    assert.equal(normalizeSegment('timeout -s KILL 60 rm -rf x'), 'rm -rf x');
+    assert.equal(normalizeSegment('git --attr-source HEAD push -f origin x'), 'git push -f origin x');
+    assert.equal(normalizeSegment('git -C . -c a=b --no-pager --git-dir=.git --work-tree . push --force'), 'git push --force');
+    assert.equal(normalizeSegment('gh  pr   merge 1'), 'gh pr merge 1');
+  });
+});
+
+describe('Bash rule bypasses', () => {
+  const config = loadGateConfig(join(dirname(fileURLToPath(import.meta.url)), '..', 'settings.json'));
+  const realRules = config.status === 'ok' ? config.rules : [];
+  const denied = (command: string) => evaluate(bash(command), realRules, { home: HOME })?.rule;
+
+  it('reads the real deny list', () => {
+    assert.equal(config.status, 'ok');
+  });
+
+  it('blocks every force-push form', () => {
+    for (const command of [
+      'git push --force origin x',
+      'git push --force-with-lease',
+      'git push --force-with-lease=x:abc origin x',
+      'git push --force-if-includes origin x',
+      'git push -uf origin x',
+      'git push --mirror origin',
+      'git push origin +x',
+      'git push origin +HEAD:feat/x',
+      'git push --repo origin +HEAD:feat/x',
+      'git push --repo=origin +HEAD:feat/x',
+      'git -C . push --force',
+      'time git push -f origin x',
+      'nice git push -f origin x',
+      'timeout 60 git push --force origin x',
+      '/usr/bin/env git push -f origin x',
+      'command -p git push -f origin x',
+      'exec -a name git push -f origin x',
+      '/usr/bin/time /usr/bin/nice git push -f origin x',
+      'timeout --signal KILL 60 git push -f origin x',
+      'timeout -- 60 git push -f origin x',
+      'env --unset X --chdir . git push -f origin x',
+      'nice --adjustment 5 git push -f origin x',
+      'git --attr-source HEAD push -f origin x',
+      'FOO=1 git push -f',
+      'cd /tmp && command git -c k=v push -f origin x',
+    ]) {
+      assert.notEqual(denied(command), undefined, command);
+    }
+  });
+
+  it('blocks a push that names main or master as a destination', () => {
+    for (const command of [
+      'git push origin main',
+      'git push origin HEAD:main',
+      'git push --repo origin main',
+      'git push --repo=origin HEAD:main',
+      'git push origin x:refs/heads/master',
+      'git push origin :main',
+      'git push -u origin master',
+      'git push origin --delete main',
+      'git --no-pager push origin HEAD:master',
+    ]) {
+      assert.notEqual(denied(command), undefined, command);
+    }
+  });
+
+  it('blocks rm with a recursive and a force flag in any order', () => {
+    for (const command of ['rm -rf x', 'rm -fr x', 'rm -r -f x', 'rm -Rf x', 'rm -rfv x', 'rm --recursive --force x', 'command rm -rf x', 'X=1 rm -fr x', 'nohup rm -rf x']) {
+      assert.notEqual(denied(command), undefined, command);
+    }
+  });
+
+  it('blocks extra whitespace in a denied command', () => {
+    assert.equal(denied('gh  pr merge 1'), 'Bash(gh pr merge *)');
+  });
+
+  it('blocks glab and REST API merges', () => {
+    for (const command of [
+      'glab mr merge 58 --yes',
+      'glab mr merge',
+      'glab mr accept 58',
+      'glab mr accept 58 --yes',
+      'glab api -X PUT projects/1/merge_requests/58/merge',
+      'glab api --method PUT "projects/g%2Fx/merge_requests/58/merge"',
+      'gh api -X PUT repos/o/r/pulls/7/merge',
+    ]) {
+      assert.notEqual(denied(command), undefined, command);
+    }
+  });
+
+  it('blocks destructive SQL in common cases', () => {
+    for (const command of [
+      'psql -c "DROP TABLE x"',
+      'psql -c "drop table x"',
+      'psql -c "Drop Table x"',
+      'psql -c "DROP DATABASE x"',
+      'psql -c "drop database x"',
+      'psql -c "Drop Database x"',
+      'psql -c "TRUNCATE TABLE x"',
+      'mysql -e "TRUNCATE TABLE x"',
+      'mysql -e "truncate table x"',
+      'psql -c "TRUNCATE x"',
+      'docker exec db psql -U u -c "truncate member_preferences cascade"',
+    ]) {
+      assert.notEqual(denied(command), undefined, command);
+    }
+  });
+
+  it('matches a file tool target through a symlinked directory', () => {
+    const home = mkdtempSync(join(tmpdir(), 'deny-gate-home-'));
+    try {
+      mkdirSync(join(home, 'dev', 'repo', '.git'), { recursive: true });
+      writeFileSync(join(home, 'dev', 'repo', '.git', 'agent-verify-passed'), '');
+      symlinkSync(join(home, 'dev', 'repo', '.git'), join(home, 'gitdir'));
+      const write = (file_path: string) => evaluate({ tool_name: 'Write', tool_input: { file_path }, cwd: home }, realRules, { home })?.rule;
+      const rule = 'Edit(**/.git/agent-verify-passed)';
+      assert.equal(write(join(home, 'gitdir', 'agent-verify-passed')), rule);
+      assert.equal(write(join(home, 'gitdir', 'new', '..', 'agent-verify-passed')), rule);
+      assert.equal(write(join(home, 'gitdir', 'other')), undefined);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('still allows the forms the rules do not cover', () => {
+    for (const command of [
+      'git push -u origin feat/x',
+      'git push origin feat/main-fix',
+      'git push origin HEAD:feat/x',
+      'git push --follow-tags origin feat/x',
+      'git -C ../repo push origin feat/x',
+      'rm -r dir',
+      'rm -f file',
+      'gh pr view 1',
+      'git commit -m "explain rm -rf and git push -f"',
+      'glab mr view 58',
+      'glab mr list',
+      'glab api projects/1/merge_requests/58/notes',
+      'gh api repos/o/r/pulls/7/comments',
+      'git merge --ff-only origin/main',
+      'git log --merges',
+      'truncate -s 0 file.log',
+      'grep -rn "TRUNCATE " migrations/',
+      'git commit -m "docs: explain TRUNCATE usage"',
+    ]) {
+      assert.equal(denied(command), undefined, command);
+    }
   });
 });
 
@@ -137,15 +291,52 @@ describe('hook wrapper', () => {
     assert.match(result.stderr, /Read\(\*\*\/\.env\)/);
   });
 
-  it('enforces Bash rules on Codex only', () => {
-    assert.equal(run(bash('sudo ls')).status, 0);
+  it('enforces Bash rules on every host', () => {
+    assert.equal(run(bash('sudo ls')).status, 2);
     assert.equal(run(bash('sudo ls'), 'codex').status, 2);
-    assert.equal(run(bash('sudo ls'), 'pi').status, 0);
+    assert.equal(run(bash('sudo ls'), 'pi').status, 2);
   });
 
   it('passes a malformed payload', () => {
     const result = spawnSync('bash', [wrapper], { input: 'not json', env: { ...process.env, DENY_RULES_SOURCE: source }, encoding: 'utf8' });
     assert.equal(result.status, 0);
+  });
+
+  it('blocks on Codex when node is missing, and passes elsewhere', () => {
+    const empty = mkdtempSync(join(tmpdir(), 'deny-gate-path-'));
+    const runBare = (host: string) =>
+      spawnSync('/bin/bash', [wrapper], {
+        input: JSON.stringify(bash('ls')),
+        env: { PATH: empty, DENY_RULES_SOURCE: source, AGENT_HOOK_HOST: host },
+        encoding: 'utf8',
+      });
+    const codex = runBare('codex');
+    assert.equal(codex.status, 2);
+    assert.match(codex.stderr, /node is not on PATH/);
+    assert.equal(runBare('').status, 0);
+    rmSync(empty, { recursive: true, force: true });
+  });
+
+  it('blocks on Codex when node cannot run the gate', () => {
+    const broken = (host: string) =>
+      spawnSync('bash', [wrapper], {
+        input: JSON.stringify(bash('ls')),
+        env: { ...process.env, DENY_RULES_SOURCE: source, AGENT_HOOK_HOST: host, NODE_OPTIONS: '--no-such-node-flag' },
+        encoding: 'utf8',
+      });
+    assert.equal(broken('codex').status, 2);
+    assert.notEqual(broken('').status, 2);
+  });
+
+  it('blocks on Codex when the deny list cannot be read, and passes elsewhere', () => {
+    const missing = (host: string) =>
+      spawnSync('bash', [wrapper], {
+        input: JSON.stringify(bash('ls')),
+        env: { ...process.env, DENY_RULES_SOURCE: join(dir, 'absent.json'), AGENT_HOOK_HOST: host },
+        encoding: 'utf8',
+      });
+    assert.equal(missing('codex').status, 2);
+    assert.equal(missing('').status, 0);
   });
 });
 
@@ -153,7 +344,7 @@ describe('real deny list', () => {
   const config = loadGateConfig(join(repoRoot, 'settings.json'));
   if (config.status !== 'ok') throw new Error(`real deny list did not load: ${config.reason}`);
   const realRules = config.rules;
-  const verdict = (command: string) => evaluate(bash(command), realRules, { home: HOME, bashRules: true });
+  const verdict = (command: string) => evaluate(bash(command), realRules, { home: HOME });
   const unblocked = (commands: string[]) => commands.filter((c) => verdict(c) === undefined);
   const blocked = (commands: string[]) =>
     commands.flatMap((c) => {

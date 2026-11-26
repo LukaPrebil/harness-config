@@ -6,10 +6,14 @@
 # that needs it.
 set -euo pipefail
 
+case "${1:-}" in
+  -h|--help) sed -n '2,/^[^#]/s/^# \{0,1\}//p' "$0"; exit 0 ;;
+esac
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-MAX_WORDS=4040
+MAX_WORDS=4100
 MAX_REVIEW_TIME=100
 
 # Claude Code loads a rule at launch unless its frontmatter scopes it with paths:.

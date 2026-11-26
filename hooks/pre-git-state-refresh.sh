@@ -1,8 +1,8 @@
 #!/bin/bash
 # Pre-git PR state refresh.
-# Before write-side git/gh commands, probe origin + gh and inject a one-line
-# state block as additionalContext so Claude sees ground truth instead of
-# inferring from stale conversation memory.
+# Before write-side git/gh commands, ask gh for the branch's PR and inject a
+# one-line state block as additionalContext so Claude sees ground truth
+# instead of inferring from stale conversation memory.
 #
 # Triggers (regex on the bash command):
 #   - git push
@@ -14,92 +14,96 @@
 
 # shellcheck source=lib/resolve-repo.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-repo.sh"
+# shellcheck source=lib/context.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/context.sh"
+# shellcheck source=lib/once.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/once.sh"
+# shellcheck source=lib/hook.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/hook.sh"
 
-INPUT=$(cat)
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+hook_read
+first_run_for_call "$INPUT" pre-git-state-refresh || exit 0
 
-[ "$SKIP_PR_STATE_REFRESH" = "1" ] && exit 0
+hook_bypass SKIP_PR_STATE_REFRESH && exit 0
 
-# Match trigger commands only. Anything else exits silently.
+# Match trigger commands only. Anything else exits silently. The hook's own
+# cwd is not the tool call's, so the repo comes from the payload.
+# CLAUDE_PROJECT_DIR alone is wrong whenever the harness runs hooks from
+# another directory.
 case "$COMMAND" in
-  *"git push"*) ;;
-  *"git commit"*) ;;
-  *"gh pr edit"*|*"gh pr comment"*|*"gh pr merge"*) ;;
-  *"gh pr close"*|*"gh pr ready"*|*"gh pr review"*) ;;
+  *"gh pr edit"*|*"gh pr comment"*|*"gh pr merge"*) KIND=gh ;;
+  *"gh pr close"*|*"gh pr ready"*|*"gh pr review"*) KIND=gh ;;
+  *git*) KIND=git ;;
   *) exit 0 ;;
 esac
-
-# --help / -h variants are harmless; skip.
-case "$COMMAND" in
-  *" --help"*|*" -h"*) exit 0 ;;
-esac
+if [ "$KIND" = git ]; then
+  parse_git_command "$COMMAND" "$CWD" "push|commit" || exit 0
+  KIND=$GIT_SUB
+else
+  gh_runs "$COMMAND" "$CWD" "pr edit|pr comment|pr merge|pr close|pr ready|pr review"
+fi
+# A --help or -h call only prints usage.
+git_args_ask_help && exit 0
+DIR=$GIT_REPO_DIR
 
 emit() {
-  # Inject as additionalContext so Claude sees the state line.
-  jq -n --arg ctx "$1" '{
-    continue: true,
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      additionalContext: $ctx
-    }
-  }'
+  emit_context PreToolUse "$1"
   exit 0
 }
-
-# The hook's own cwd is not the tool call's, so the repo comes from the
-# payload. CLAUDE_PROJECT_DIR alone is wrong whenever the harness runs hooks
-# from another directory.
-CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
-DIR=$(resolve_repo_dir "$COMMAND" "$CWD")
 
 # Not in a git repo - nothing to probe.
 if ! git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1; then
   emit "[pr-state] unavailable=not-a-repo"
 fi
 
-BRANCH=$(git -C "$DIR" rev-parse --abbrev-ref HEAD 2>/dev/null)
-[ -z "$BRANCH" ] || [ "$BRANCH" = "HEAD" ] && emit "[pr-state] unavailable=detached-head"
+BRANCH=$(git -C "$DIR" branch --show-current 2>/dev/null)
+[ -z "$BRANCH" ] && emit "[pr-state] unavailable=detached-head"
 
 # Skip git commit on default branch - the commit-branch-gate already blocks it.
-case "$COMMAND" in
-  *"git commit"*)
-    case "$BRANCH" in
-      main|master) exit 0 ;;
-    esac
-    ;;
-esac
+if [ "$KIND" = commit ]; then
+  case "$BRANCH" in
+    main|master) exit 0 ;;
+  esac
+fi
 
-# No remote configured - nothing to fetch / no PR to look up.
+# No remote configured - no PR to look up.
 if ! git -C "$DIR" remote get-url origin >/dev/null 2>&1; then
   emit "[pr-state] branch=$BRANCH unavailable=no-remote"
 fi
 
-# Probe origin and gh. Both errors degrade silently to unavailable. gh has no
-# -C and reads the branch from its cwd, so it runs from the resolved repo too.
-git -C "$DIR" fetch --prune origin >/dev/null 2>&1
+# A branch no remote has seen cannot have a PR, and most calls land here, so
+# the gh round trip is skipped. @{push} rather than @{upstream}: a branch
+# created from origin/main tracks origin/main before its first push.
+if ! git -C "$DIR" rev-parse --verify -q "$BRANCH@{push}" >/dev/null 2>&1 \
+  && [ -z "$(git -C "$DIR" for-each-ref --count=1 --format=x "refs/remotes/*/$BRANCH" 2>/dev/null)" ]; then
+  emit "[pr-state] branch=$BRANCH state=NONE (branch never pushed)"
+fi
+
+# gh errors degrade silently to unavailable. gh has no -C and reads the branch
+# from its cwd, so it runs from the resolved repo too.
 PR_JSON=$(cd "$DIR" && gh pr view --json state,mergedAt,headRefName,url 2>/dev/null)
 
 if [ -z "$PR_JSON" ]; then
   emit "[pr-state] branch=$BRANCH state=NONE (no PR for this branch, or gh unavailable)"
 fi
 
-STATE=$(echo "$PR_JSON" | jq -r '.state // "UNKNOWN"')
-URL=$(echo "$PR_JSON" | jq -r '.url // ""')
-MERGED_AT=$(echo "$PR_JSON" | jq -r '.mergedAt // ""')
+# One value per line, because an empty field would collapse under a tab split.
+{ read -r STATE; read -r URL; read -r MERGED_AT; } \
+  < <(echo "$PR_JSON" | jq -r '.state // "UNKNOWN", .url // "", .mergedAt // ""')
 
 LINE="[pr-state] branch=$BRANCH state=$STATE url=$URL"
-[ -n "$MERGED_AT" ] && [ "$MERGED_AT" != "null" ] && LINE="$LINE mergedAt=$MERGED_AT"
+[ -n "$MERGED_AT" ] && LINE="$LINE mergedAt=$MERGED_AT"
 
 # For merged / closed PRs on action commands, append a suggestion so the model
 # pauses and re-evaluates intent.
 case "$STATE" in
   MERGED)
-    case "$COMMAND" in
-      *"git push"*|*"git commit"*)
+    case "$KIND" in
+      push|commit)
         LINE="$LINE
 SUGGESTION: PR is already merged. If you intended new work, start a fresh branch from the default branch first."
         ;;
-      *"gh pr edit"*|*"gh pr comment"*|*"gh pr merge"*|*"gh pr close"*|*"gh pr ready"*|*"gh pr review"*)
+      *)
         LINE="$LINE
 SUGGESTION: PR is already merged. Confirm with the user before writing to a merged PR."
         ;;

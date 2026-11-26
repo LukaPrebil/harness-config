@@ -2,16 +2,26 @@
 # Pre-push gate: block a `git push` that the repo's checks would fail.
 # Runs as a PreToolUse hook on Bash(git push *) and Bash(git -C *).
 #
-# Order: a repo whose hooks directory is missing blocks, a repo with its own
-# pre-push hook gates itself, a repo declaring `verify:fast` runs only that,
-# and any other repo gets the guessed lint/typecheck/knip/test/build/audit run.
+# Order: a target that is not a git repo blocks, a repo whose hooks directory
+# is missing blocks, a repo with its own pre-push hook gates itself, a repo
+# declaring `verify:fast` runs only that, and any other repo gets the guessed
+# lint/typecheck/knip/test/build/audit run. A push of a branch whose PR
+# already merged blocks after the checks, whatever they decide.
 # Node checks run through the repo's own package manager, on the nvm Node
 # that the repo's .nvmrc pins.
 # Exit code 2 blocks the action and sends the error message to Claude.
-# Bypass with SKIP_PUSH_GATE=1, in the environment or inline in the command.
+# Bypass with SKIP_PUSH_GATE=1 in the host's environment.
 
 # shellcheck source=lib/resolve-repo.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-repo.sh"
+# shellcheck source=lib/package-json.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/package-json.sh"
+# shellcheck source=lib/once.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/once.sh"
+# shellcheck source=lib/husky-hooks.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/husky-hooks.sh"
+# shellcheck source=lib/hook.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/hook.sh"
 
 # detect_package_manager <dir>
 # The packageManager field, then the lockfile, walking up to the git top level
@@ -150,38 +160,78 @@ findings_report() {
   printf '%s' "$1" | grep -qi 'vulnerabilit'
 }
 
-INPUT=$(cat)
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+hook_read
+first_run_for_call "$INPUT" pre-push-gate || exit 0
 
-# Only gate on `git push` (and not `git push --help`, etc.)
 case "$COMMAND" in
-  *"git push --help"*|*"git push -h"*) exit 0 ;;
-  *"git push"*|*"git -C "*) ;;
+  *git*) ;;
   *) exit 0 ;;
 esac
+parse_git_command "$COMMAND" "$CWD" push || exit 0
+git_args_ask_help && exit 0
 
-# Honor escape hatch. PreToolUse hooks inherit the Claude Code process env,
-# not the tool command's, so an inline SKIP_PUSH_GATE=1 prefix is only
-# visible in the command string.
-case "$COMMAND" in
-  *"SKIP_PUSH_GATE=1"*)
-    echo "SKIP_PUSH_GATE=1 - bypassing pre-push gate." >&2
-    exit 0 ;;
-esac
-if [ "$SKIP_PUSH_GATE" = "1" ]; then
-  echo "SKIP_PUSH_GATE=1 - bypassing pre-push gate." >&2
+# Hooks inherit the host's environment, not the tool command's, so only a
+# human starting the host can set this.
+if hook_bypass SKIP_PUSH_GATE; then
+  echo "[pre-push-gate] SKIP_PUSH_GATE=1 - bypassing pre-push gate." >&2
   exit 0
 fi
 
-# `git -C <path> push` never contains the literal "git push", so a command
-# without either is not ours to gate.
-case "$COMMAND" in
-  *"git push"*) ;;
-  *) printf '%s\n' "$COMMAND" | grep -q 'git -C  *[^ ]*  *push' || exit 0 ;;
-esac
+DIR=$GIT_REPO_DIR
+if ! git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  hook_block pre-push-gate "" "$DIR is not a git repo, so the push cannot be checked. Run the push from inside the repo, or name it with git -C <repo>."
+fi
 
-CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
-DIR=$(resolve_repo_dir "$COMMAND" "$CWD" push)
+# A push to a branch whose PR already merged recreates the deleted remote
+# branch, and its commits land in no open PR.
+# Only a push of the checked-out branch is checked: bare `gh pr view` resolves
+# its PR through the upstream, while a bare name also matches fork PRs.
+pushes_current_branch() {
+  local word dst value=""
+  local -a refspecs=()
+  for word in ${GIT_ARGS[@]+"${GIT_ARGS[@]}"}; do
+    if [ -n "$value" ]; then value=""; continue; fi
+    case "$word" in
+      --delete|-d|--tags|:*) return 1 ;;
+      -o|--push-option|--repo|--receive-pack|--exec) value=1 ;;
+      -*) ;;
+      *) refspecs+=("$word") ;;
+    esac
+  done
+  # The first word is the remote; none or one refspec after it is supported.
+  [ "${#refspecs[@]}" -le 1 ] && return 0
+  [ "${#refspecs[@]}" -gt 2 ] && return 1
+  dst=${refspecs[1]#+}
+  dst=${dst#*:}
+  case "$dst" in
+    HEAD|"$1"|"refs/heads/$1") return 0 ;;
+  esac
+  return 1
+}
+
+block_merged_branch() {
+  local pr_state=""
+  IFS= read -r pr_state <&3
+  if [ "${pr_state%% *}" = "MERGED" ]; then
+    hook_block pre-push-gate "" "$BRANCH already merged in ${pr_state#* }. Start a new branch from the default branch for new work."
+  fi
+}
+
+# The lookup is a network call, so it runs on fd 3 alongside the checks. The
+# EXIT trap reads its answer, so a merged branch blocks on every outcome,
+# including a failed check whose own message would otherwise hide it.
+BRANCH=$(git -C "$DIR" branch --show-current 2>/dev/null)
+if [ -n "$BRANCH" ] && command -v gh >/dev/null 2>&1 && pushes_current_branch "$BRANCH"; then
+  exec 3< <(cd "$DIR" && gh pr view --json state,url -q '.state + " " + .url' 2>/dev/null)
+  MERGED_CHECK=1
+  trap block_merged_branch EXIT
+fi
+
+# declares_dependencies: ./package.json lists dependencies or devDependencies,
+# so the checks need node_modules to run.
+declares_dependencies() {
+  jq -e '((.dependencies // {}) + (.devDependencies // {})) | length > 0' package.json >/dev/null 2>&1
+}
 
 # Husky points the repo-local core.hooksPath at a directory the install creates.
 # A checkout that never ran it has the setting but not the directory, and git
@@ -194,10 +244,10 @@ if [ -n "$HOOKS_PATH" ]; then
     /*) HOOKS_DIR="$HOOKS_PATH" ;;
     *) HOOKS_DIR="$TOP/$HOOKS_PATH" ;;
   esac
+  [ -n "$TOP" ] && restore_husky_hooks "$TOP" "$HOOKS_PATH"
   if [ -n "$TOP" ] && [ ! -d "$HOOKS_DIR" ]; then
     INSTALL=$(install_cmd "$(detect_package_manager "$TOP")")
-    echo "[pre-push-gate] core.hooksPath is $HOOKS_PATH, but $HOOKS_DIR does not exist, so the repo's own hooks would not run. Run '$INSTALL' in $TOP, then push again." >&2
-    exit 2
+    hook_block pre-push-gate "" "core.hooksPath is $HOOKS_PATH, but $HOOKS_DIR does not exist, so the repo's own hooks would not run. Run '$INSTALL' in $TOP, then push again."
   fi
 fi
 
@@ -244,9 +294,7 @@ run_step() {
   OUT=$(bash -c "$cmd" 2>&1)
   STATUS=$?
   if [ $STATUS -ne 0 ]; then
-    echo "[pre-push-gate] $label FAILED. Fix before pushing (or set SKIP_PUSH_GATE=1 to bypass):" >&2
-    echo "$OUT" | tail -40 >&2
-    exit 2
+    hook_block pre-push-gate "" "$label FAILED. Fix before pushing:" "$(printf '%s\n' "$OUT" | tail -40)"
   fi
 }
 
@@ -256,19 +304,18 @@ if [ "$PROJECT_TYPE" = "node" ]; then
   if NODE_BIN=$(nvmrc_node_bin "$PROJECT_ROOT"); then
     [ -n "$NODE_BIN" ] && PATH="$NODE_BIN:$PATH"
   else
-    echo "[pre-push-gate] .nvmrc pins Node $NODE_BIN, which nvm has not installed. Run 'nvm install $NODE_BIN', then push again (or bypass with SKIP_PUSH_GATE=1)." >&2
+    echo "[pre-push-gate] .nvmrc pins Node $NODE_BIN, which nvm has not installed. Run 'nvm install $NODE_BIN', then push again." >&2
     exit 2
   fi
   PM=$(detect_package_manager "$PROJECT_ROOT")
   if ! command -v "$PM" >/dev/null 2>&1; then
-    echo "[pre-push-gate] $PROJECT_ROOT uses $PM, which is not on PATH. Install it or enable corepack (or bypass with SKIP_PUSH_GATE=1)." >&2
-    exit 2
+    hook_block pre-push-gate "" "$PROJECT_ROOT uses $PM, which is not on PATH. Install it or enable corepack."
   fi
   # A fresh worktree has no node_modules; the checks below would fail with
-  # noise unrelated to the branch. Fail with the actionable step instead.
-  if [ ! -d "$PROJECT_ROOT/node_modules" ]; then
-    echo "[pre-push-gate] $PROJECT_ROOT has no node_modules - run '$(install_cmd "$PM")' there first (or bypass with SKIP_PUSH_GATE=1)." >&2
-    exit 2
+  # noise unrelated to the branch. Fail with the actionable step instead. A
+  # manifest with no dependencies installs nothing, so it needs none.
+  if [ ! -d "$PROJECT_ROOT/node_modules" ] && declares_dependencies; then
+    hook_block pre-push-gate "" "$PROJECT_ROOT has no node_modules - run '$(install_cmd "$PM")' there first."
   fi
   # pnpm hands flags after the script name to the script, so --silent goes
   # before `run`. Yarn Berry has no --silent.
@@ -276,19 +323,15 @@ if [ "$PROJECT_TYPE" = "node" ]; then
     yarn) RUN="yarn run" ;;
     *) RUN="$PM --silent run" ;;
   esac
-  has_script() {
-    node -e "const p=require('./package.json'); process.exit(p.scripts?.['$1'] ? 0 : 1)" 2>/dev/null
-  }
   # A repo that declares its fast gate owns the push checks.
   if has_script "verify:fast"; then
     run_step "verify:fast" "$PM run verify:fast"
     echo "[pre-push-gate] verify:fast passed." >&2
     exit 0
   fi
-  has_script lint && run_step "lint" "CI=true $RUN lint"
-  has_script typecheck && run_step "typecheck" "CI=true $RUN typecheck"
-  has_script knip && run_step "knip" "CI=true $RUN knip"
-  has_script test && run_step "test" "CI=true $RUN test"
+  for step in lint typecheck knip test; do
+    has_script "$step" && run_step "$step" "CI=true $RUN $step"
+  done
   # A checkout with no local env, such as a fresh worktree, builds with the
   # committed template. CI builds with throwaway values the same way. The
   # template stays scoped to the build: test runners read env too.
@@ -355,14 +398,15 @@ if [ "$PROJECT_TYPE" = "node" ]; then
       AUDIT_DIR="$PROJECT_ROOT"
       BRANCH_TMP=$(extract_tree HEAD)
       if [ -n "$BRANCH_TMP" ]; then
-        trap 'if [ -n "${BRANCH_TMP:-}" ] || [ -n "${BASE_TMP:-}" ]; then rm -rf "$BRANCH_TMP" "$BASE_TMP" 2>/dev/null; fi; :' EXIT
+        # This trap replaces the merged-branch one, so it runs that check too.
+        trap 'if [ -n "${BRANCH_TMP:-}" ] || [ -n "${BASE_TMP:-}" ]; then rm -rf "$BRANCH_TMP" "$BASE_TMP" 2>/dev/null; fi; [ "${MERGED_CHECK:-0}" = 1 ] && block_merged_branch; :' EXIT
         if [ -z "$(tree_lockfile "${BRANCH_TMP}/${PREFIX}" "$AUDIT_PM")" ]; then
-          echo "[pre-push-gate] audit FAILED setup: the pushed tree has no $AUDIT_PM lockfile to audit. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+          echo "[pre-push-gate] audit FAILED setup: the pushed tree has no $AUDIT_PM lockfile to audit. Fix before pushing:" >&2
           exit 2
         fi
         AUDIT_DIR="${BRANCH_TMP}/${PREFIX}"
       elif git rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
-        echo "[pre-push-gate] audit FAILED setup: the pushed tree could not be extracted. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+        echo "[pre-push-gate] audit FAILED setup: the pushed tree could not be extracted. Fix before pushing:" >&2
         exit 2
       fi
       # An unborn HEAD leaves AUDIT_DIR on the working tree, the only tree
@@ -374,23 +418,23 @@ if [ "$PROJECT_TYPE" = "node" ]; then
       fi
       if [ "$AUDIT_STATUS" -ne 0 ]; then
         if ! findings_report "$AUDIT_OUT"; then
-          echo "[pre-push-gate] audit FAILED without a findings report (tool or registry failure), so the comparison cannot run. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+          echo "[pre-push-gate] audit FAILED without a findings report (tool or registry failure), so the comparison cannot run. Fix before pushing:" >&2
           echo "$AUDIT_OUT" | tail -40 >&2
           exit 2
         fi
         if [ -z "$MB" ]; then
-          echo "[pre-push-gate] audit FAILED and no merge-base is available to compare against. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+          echo "[pre-push-gate] audit FAILED and no merge-base is available to compare against. Fix before pushing:" >&2
           echo "$AUDIT_OUT" | tail -40 >&2
           exit 2
         fi
         BASE_TMP=$(extract_tree "$MB")
         if [ -z "$BASE_TMP" ]; then
-          echo "[pre-push-gate] audit FAILED and the merge-base tree could not be prepared, so the finding cannot be compared. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+          echo "[pre-push-gate] audit FAILED and the merge-base tree could not be prepared, so the finding cannot be compared. Fix before pushing:" >&2
           echo "$AUDIT_OUT" | tail -40 >&2
           exit 2
         fi
         if [ -z "$(tree_lockfile "${BASE_TMP}/${PREFIX}" "$AUDIT_PM")" ]; then
-          echo "[pre-push-gate] audit FAILED and the merge-base lacks the $AUDIT_PM lockfile, so the finding is new. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+          echo "[pre-push-gate] audit FAILED and the merge-base lacks the $AUDIT_PM lockfile, so the finding is new. Fix before pushing:" >&2
           echo "$AUDIT_OUT" | tail -40 >&2
           exit 2
         fi
@@ -398,12 +442,12 @@ if [ "$PROJECT_TYPE" = "node" ]; then
         BASE_STATUS=$?
         if [ "$BASE_STATUS" -eq 0 ]; then
           rm -rf "${BASE_TMP:?}"
-          echo "[pre-push-gate] audit FAILED with a critical finding the merge-base does not carry. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+          echo "[pre-push-gate] audit FAILED with a critical finding the merge-base does not carry. Fix before pushing:" >&2
           echo "$AUDIT_OUT" | tail -40 >&2
           exit 2
         fi
         if ! findings_report "$BASE_OUT"; then
-          echo "[pre-push-gate] audit FAILED and the merge-base audit failed without a findings report, so the comparison is inconclusive. Fix before pushing (or set SKIP_PUSH_GATE=1):" >&2
+          echo "[pre-push-gate] audit FAILED and the merge-base audit failed without a findings report, so the comparison is inconclusive. Fix before pushing:" >&2
           echo "$AUDIT_OUT" | tail -40 >&2
           exit 2
         fi

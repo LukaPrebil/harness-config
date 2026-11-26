@@ -114,6 +114,7 @@ Releases never publish to npm. The bot release commit on `main` is the one non-h
 - **`agents/`** - Claude Code expert teammate personas. Equivalent host mechanics are deferred; routing is in [`rules/agent-routing.md`](rules/agent-routing.md).
 - **`skills/`** - shared workflows such as `grill-with-docs`, `build`, `debug`, `research`, and `verify-done`.
 - **`hooks/`** - Claude Code automation wired into `settings.json`; host-specific parity is deferred.
+- **`mods/`** - Claude Code mods loaded through `CLAUDE_CODE_PLUGIN_DIRS`: [session-focus](mods/session-focus/README.md), [pr-fleet](mods/pr-fleet/README.md), and [alerts](mods/alerts/README.md).
 - **`scripts/`** - the multi-host bootstrap, its Claude compatibility wrapper, and utilities used by hooks and skills.
 - **`shims/`** - the account shims the bootstrap links into `~/bin`, so each host reads the config dir for the working directory.
 - **`docs/adr/`** - Architecture Decision Records.
@@ -123,5 +124,5 @@ Releases never publish to npm. The bot release commit on `main` is the one non-h
 ## More
 
 - **Security boundaries** - the deny list and Bash restrictions live in [`settings.json`](settings.json).
-- **CI** - `.github/workflows/pull-request.yml` runs six jobs. They cover markdown linting, the rule budget, the prose gate, the pi extension tests, the shell test suites, and config integrity. A single `Gate` check aggregates them.
-- **Local gate** - `scripts/config-budget.sh`, `scripts/config-integrity.sh`, and `scripts/shellcheck-all.sh` each run standalone and are what CI invokes.
+- **CI** - `.github/workflows/pull-request.yml` runs markdown linting, the rule budget, the extension tests, the type check, config integrity, and every shell suite through `npm run test:shell`. A single `Gate` check aggregates them.
+- **Local gate** - `npm run verify` runs the same checks as CI; `npm run verify:fast` is the pre-push subset.

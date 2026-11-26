@@ -13,8 +13,12 @@
 #
 # Exit 2 blocks the edit and feeds the message back to the agent.
 
-INPUT=$(cat)
-FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+# shellcheck source=lib/state-roots.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/state-roots.sh"
+# shellcheck source=lib/hook.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/hook.sh"
+
+hook_read
 AGENT=$(echo "$INPUT" | jq -r '.agent_type // empty')
 [ -z "$FILE" ] && exit 0
 [ "$AGENT" = "QA Expert" ] && exit 0
@@ -25,24 +29,15 @@ TOP=$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null) || exit 0
 BRANCH=$(git -C "$TOP" branch --show-current 2>/dev/null)
 [ -z "$BRANCH" ] && exit 0
 
-COMMON=$(git -C "$TOP" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
-ROOTS=("$TOP")
-[ -n "$COMMON" ] && [ "$(dirname "$COMMON")" != "$TOP" ] && ROOTS+=("$(dirname "$COMMON")")
-
-LOCK=""
-for root in "${ROOTS[@]}"; do
-  candidate="$root/.claude/state/runs/${BRANCH//\//-}/tests.lock"
-  [ -f "$candidate" ] && LOCK="$candidate" && break
-done
-[ -z "$LOCK" ] && exit 0
+state_roots "$TOP"
+LOCK=$(run_file "$BRANCH" tests.lock) || exit 0
 
 # Locked tests are committed, so git's own path survives symlinked prefixes.
 REL=$(cd "$(dirname "$FILE")" 2>/dev/null && git ls-files --full-name -- "$(basename "$FILE")")
 [ -z "$REL" ] && exit 0
 if grep -qxF "$REL" "$LOCK"; then
-  echo "[pre-edit-test-lock] $REL is a locked test for $BRANCH." >&2
-  echo "Make the code pass the test as written. If the test itself is wrong, report it so the QA Expert fixes it." >&2
-  exit 2
+  hook_block pre-edit-test-lock "" "$REL is a locked test for $BRANCH." \
+    "Make the code pass the test as written. If the test itself is wrong, report it so the QA Expert fixes it."
 fi
 
 exit 0

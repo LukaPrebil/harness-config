@@ -7,12 +7,14 @@ Review the pull request: $ARGUMENTS
 
 **why-no-hook:** review workflow guidance; each step requires reading the PR and judging code quality, evidence, and wording.
 
+Resolve `$STATE` first: `.claude/state` in the main checkout of the repo being changed, per `rules/state-persistence.md`.
+
 ## Stage 0: fetch and understand
 
 1. **Pick the platform CLI**: `gh` for GitHub, `glab` for GitLab. Judge from the PR URL or the repo's remote. `(review-time: see section note)`
 2. **Fetch PR details**: title, body, files, commits, additions, deletions, base and head refs. `(review-time: see section note)`
 3. **Read the full diff.** `(review-time: see section note)`
-4. **Understand intent**: read the PR description, linked issues, and commit messages before judging any line. When a spec exists - issue refs in the commits, a linked issue, or a spec under `.claude/state/specs/` - check the diff against it for three things: requirements asked for but missing or partial, behavior nobody asked for, and requirements implemented wrong. Quote the spec line for each. `(review-time: see section note)`
+4. **Understand intent**: read the PR description, linked issues, and commit messages before judging any line. When a spec exists - issue refs in the commits, a linked issue, or a spec under `$STATE/specs/` - check the diff against it for three things: requirements asked for but missing or partial, behavior nobody asked for, and requirements implemented wrong. Quote the spec line for each. `(review-time: see section note)`
 
 ## Stage 1: reviewers
 

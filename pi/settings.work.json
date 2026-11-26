@@ -11,14 +11,13 @@
   "markdown": {
     "mermaid": "streaming"
   },
-  "showCacheMissNotices": true,
   "enableInstallTelemetry": false,
   "packages": [
     "npm:pi-ollama-cloud",
     "npm:pi-subagents",
-    "npm:@gotgenes/pi-permission-system@42.0.0",
-    "npm:pi-mcp-adapter@7.0.0",
-    "npm:pi-intercom@0.18.1",
+    "npm:@gotgenes/pi-permission-system@44.0.1",
+    "npm:pi-mcp-adapter@7.0.1",
+    "npm:pi-intercom@0.19.0",
     "npm:pi-web-access"
   ],
   "defaultProvider": "openai-codex",
@@ -103,5 +102,11 @@
   "skills": [
     "!skills/synced/588e67cb-*/**",
     "!skills/synced/a141ca0a-*/**"
-  ]
+  ],
+  "notices": {
+    "cacheMisses": true,
+    "cacheWarming": true,
+    "compactionCosts": true,
+    "reasoningDrops": true
+  }
 }
